@@ -1,0 +1,132 @@
+// FILE: schemas/pm_pitch_with_ranking.schema.json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sgxanalytics.ai/schemas/pm_pitch_with_ranking.schema.json",
+  "title": "PM Pitch with Instrument Ranking",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "week_id",
+    "asof_et",
+    "pm_model",
+    "universe",
+    "instrument_ranking",
+    "selected_trade",
+    "monitoring_plan"
+  ],
+  "properties": {
+    "week_id": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "asof_et": {
+      "type": "string",
+      "description": "ISO 8601 timestamp with ET offset, e.g., 2025-12-31T09:00:00-05:00"
+    },
+    "pm_model": { "type": "string", "minLength": 1 },
+    "universe": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["SPY","QQQ","IWM","TLT","HYG","UUP","GLD","USO","VIXY","SH"] },
+      "minItems": 10,
+      "maxItems": 10
+    },
+
+    "instrument_ranking": {
+      "type": "array",
+      "description": "Full ranking of the universe, 1 = best expected alpha vs SPY this week.",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "rank", "expected_outperformance_bucket_vs_spy", "reason"],
+        "properties": {
+          "ticker": { "type": "string", "enum": ["SPY","QQQ","IWM","TLT","HYG","UUP","GLD","USO","VIXY","SH"] },
+          "rank": { "type": "integer", "minimum": 1, "maximum": 10 },
+          "expected_outperformance_bucket_vs_spy": { "type": "string", "enum": ["STRONG","MODEST","FLAT","NEGATIVE"] },
+          "reason": { "type": "string", "minLength": 10, "maxLength": 400 }
+        }
+      },
+      "allOf": [
+        {
+          "description": "Ranks must be unique (1..10).",
+          "not": {
+            "properties": {
+              "instrument_ranking": {
+                "contains": {
+                  "allOf": [
+                    { "properties": { "rank": { "const": 1 } } },
+                    { "properties": { "rank": { "const": 1 } } }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "selected_trade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ticker",
+        "direction",
+        "horizon",
+        "conviction",
+        "thesis_bullets",
+        "invalidation_rule_this_week",
+        "entry_plan"
+      ],
+      "properties": {
+        "ticker": { "type": "string", "enum": ["SPY","QQQ","IWM","TLT","HYG","UUP","GLD","USO","VIXY","SH"] },
+        "direction": { "type": "string", "enum": ["LONG","SHORT","FLAT"] },
+        "horizon": { "type": "string", "enum": ["1D","3D","1W"] },
+        "conviction": { "type": "integer", "minimum": -2, "maximum": 2 },
+        "thesis_bullets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 5, "maxLength": 240 },
+          "minItems": 2,
+          "maxItems": 6
+        },
+        "invalidation_rule_this_week": { "type": "string", "minLength": 10, "maxLength": 400 },
+        "entry_plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["order_type", "timing", "notes"],
+          "properties": {
+            "order_type": { "type": "string", "enum": ["MARKET","LIMIT"] },
+            "timing": { "type": "string", "enum": ["MOO","INTRADAY","MOC"] },
+            "notes": { "type": "string", "minLength": 0, "maxLength": 400 }
+          }
+        }
+      }
+    },
+
+    "monitoring_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoints_et", "key_indicators"],
+      "properties": {
+        "checkpoints_et": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["09:00","12:00","14:00","15:50"] },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "key_indicators": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "expected_signal", "flip_condition"],
+            "properties": {
+              "name": { "type": "string", "minLength": 2, "maxLength": 80 },
+              "expected_signal": { "type": "string", "minLength": 2, "maxLength": 200 },
+              "flip_condition": { "type": "string", "minLength": 2, "maxLength": 200 }
+            }
+          },
+          "minItems": 1,
+          "maxItems": 8
+        }
+      }
+    }
+  }
+}

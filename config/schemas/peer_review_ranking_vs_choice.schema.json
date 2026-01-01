@@ -1,0 +1,114 @@
+// FILE: schemas/peer_review_ranking_vs_choice.schema.json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sgxanalytics.ai/schemas/peer_review_ranking_vs_choice.schema.json",
+  "title": "Peer Review Rubric (Scores ranking + trade choice consistency)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "week_id",
+    "asof_et",
+    "reviewer_model",
+    "pitch_id",
+    "scores",
+    "ranking_assessment",
+    "trade_choice_assessment",
+    "kill_shot",
+    "one_flip_condition",
+    "suggested_fix"
+  ],
+  "properties": {
+    "week_id": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "asof_et": { "type": "string" },
+    "reviewer_model": { "type": "string", "minLength": 1 },
+    "pitch_id": { "type": "string", "minLength": 1 },
+
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clarity",
+        "edge_plausibility",
+        "timing_catalyst",
+        "risk_definition",
+        "indicator_integrity",
+        "originality",
+        "tradeability",
+        "ranking_quality",
+        "ranking_trade_alignment"
+      ],
+      "properties": {
+        "clarity": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "edge_plausibility": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "timing_catalyst": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "risk_definition": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "indicator_integrity": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "originality": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "tradeability": { "type": "integer", "minimum": 1, "maximum": 10 },
+
+        "ranking_quality": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Does the ranking provide coherent relative-value ordering vs SPY with plausible reasons?"
+        },
+        "ranking_trade_alignment": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Is the selected trade consistent with the stated ranking (e.g., top-1/2 pick), OR is divergence explicitly justified?"
+        }
+      }
+    },
+
+    "ranking_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["top3_reasonableness", "bottom3_reasonableness", "missing_logic_flags"],
+      "properties": {
+        "top3_reasonableness": { "type": "string", "minLength": 10, "maxLength": 500 },
+        "bottom3_reasonableness": { "type": "string", "minLength": 10, "maxLength": 500 },
+        "missing_logic_flags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 2, "maxLength": 120 },
+          "minItems": 0,
+          "maxItems": 10,
+          "description": "E.g., 'No mention of USD impulse but ranked UUP #1'."
+        }
+      }
+    },
+
+    "trade_choice_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["consistency_with_ranking", "justification_quality", "invalidation_quality"],
+      "properties": {
+        "consistency_with_ranking": {
+          "type": "string",
+          "enum": ["CONSISTENT","INCONSISTENT_BUT_JUSTIFIED","INCONSISTENT_UNJUSTIFIED"]
+        },
+        "justification_quality": { "type": "string", "minLength": 10, "maxLength": 500 },
+        "invalidation_quality": { "type": "string", "minLength": 10, "maxLength": 500 }
+      }
+    },
+
+    "kill_shot": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 300,
+      "description": "Most likely failure mode within 7 days."
+    },
+    "one_flip_condition": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 300,
+      "description": "Single observable condition that would flip your view."
+    },
+    "suggested_fix": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 400,
+      "description": "Concrete improvement: adjust indicators, tighten invalidation, clarify catalyst, etc."
+    }
+  }
+}
