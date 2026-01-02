@@ -252,8 +252,8 @@ export function ResearchCalendar({ onSelectDate }) {
                         <button
                             onClick={() => setActiveTab('perplexity')}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'perplexity'
-                                    ? 'bg-blue-500 text-white shadow-md'
-                                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                ? 'bg-blue-500 text-white shadow-md'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
                                 }`}
                         >
                             Perplexity
@@ -261,8 +261,8 @@ export function ResearchCalendar({ onSelectDate }) {
                         <button
                             onClick={() => setActiveTab('gemini')}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'gemini'
-                                    ? 'bg-purple-500 text-white shadow-md'
-                                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                ? 'bg-purple-500 text-white shadow-md'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
                                 }`}
                         >
                             Gemini
@@ -285,7 +285,7 @@ export function ResearchCalendar({ onSelectDate }) {
                                     {latestReports[activeTab].model}
                                 </Badge>
                             </div>
-                            <div className="max-h-[600px] overflow-y-auto">
+                            <div>
                                 <ResearchPackCard
                                     data={{
                                         source: latestReports[activeTab].provider,

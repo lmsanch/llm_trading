@@ -170,14 +170,6 @@ export function ResearchPackCard({ data }) {
         )}
 
       </CardContent>
-      <div className="p-4 pt-3 mt-auto flex gap-2 border-t bg-card sticky bottom-0 z-10">
-        <Button className="w-full h-8 text-xs" variant="outline" size="sm">
-          <RefreshCw className="h-3 w-3 mr-2" /> Regenerate
-        </Button>
-        <Button className="w-full h-8 text-xs" size="sm">
-          <CheckCircle className="h-3 w-3 mr-2" /> Verify
-        </Button>
-      </div>
     </Card>
   );
 }
