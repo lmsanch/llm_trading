@@ -90,7 +90,9 @@ export function ResearchPackCard({ data }) {
           </h4>
           <ul className="list-disc list-inside text-sm space-y-1.5 text-muted-foreground bg-muted/30 p-2 rounded-md border">
             {(data.top_narratives || []).map((narrative, i) => (
-              <li key={i} className="pl-1">{narrative}</li>
+              <li key={i} className="pl-1">
+                {typeof narrative === 'string' ? narrative : narrative.name || JSON.stringify(narrative)}
+              </li>
             ))}
           </ul>
         </div>

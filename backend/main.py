@@ -480,14 +480,31 @@ async def get_research_history(days: int = 90):
                     report_ids = row[3]
                     statuses = row[4]
                     
+                    # Convert PostgreSQL arrays to Python lists
+                    # psycopg2 may return arrays as strings like "{uuid1,uuid2}" or as Python lists
+                    if isinstance(report_ids, list):
+                        report_ids_list = [str(id) for id in report_ids]
+                    elif isinstance(report_ids, str):
+                        # Parse PostgreSQL array string format: "{uuid1,uuid2}"
+                        report_ids_list = report_ids.strip('{}').split(',') if report_ids and report_ids != '{}' else []
+                    else:
+                        report_ids_list = []
+                    
+                    if isinstance(statuses, list):
+                        statuses_list = list(statuses)
+                    elif isinstance(statuses, str):
+                        statuses_list = statuses.strip('{}').split(',') if statuses and statuses != '{}' else []
+                    else:
+                        statuses_list = []
+                    
                     if date_str not in history:
                         history[date_str] = {"providers": [], "total": 0}
                     
                     history[date_str]["providers"].append({
                         "name": provider,
                         "count": count,
-                        "report_ids": report_ids,
-                        "statuses": statuses
+                        "report_ids": report_ids_list,
+                        "statuses": statuses_list
                     })
                     history[date_str]["total"] += count
                 
