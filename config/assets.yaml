@@ -1,0 +1,124 @@
+# Tradable Universe Configuration
+# Macro ETFs + Gold + Oil
+
+universe:
+  # Core Macro Set
+  risk_on_equities:
+    - symbol: SPY
+      name: "SPDR S&P 500 ETF Trust"
+      description: "S&P 500 index ETF"
+    - symbol: QQQ
+      name: "Invesco QQQ Trust"
+      description: "Nasdaq 100 index ETF"
+    - symbol: IWM
+      name: "iShares Russell 2000 ETF"
+      description: "Russell 2000 small-cap ETF"
+
+  duration:
+    - symbol: TLT
+      name: "iShares 20+ Year Treasury Bond ETF"
+      description: "Long-term US Treasury bonds"
+    - symbol: IEF
+      name: "iShares 7-10 Year Treasury Bond ETF"
+      description: "Intermediate-term US Treasury bonds"
+
+  credit:
+    - symbol: HYG
+      name: "iShares iBoxx High Yield Corporate Bond ETF"
+      description: "High yield corporate bonds"
+    - symbol: LQD
+      name: "iShares Investment Grade Corporate Bond ETF"
+      description: "Investment grade corporate bonds"
+
+  usd_proxy:
+    - symbol: UUP
+      name: "Invesco DB US Dollar Index Bullish Fund"
+      description: "US Dollar index ETF"
+
+  fx_proxy:
+    - symbol: FXY
+      name: "Invesco CurrencyShares Japanese Yen Trust"
+      description: "Japanese Yen ETF"
+
+  emerging_markets:
+    - symbol: EEM
+      name: "iShares MSCI Emerging Markets ETF"
+      description: "Emerging markets index"
+
+  # Wrinkle Instruments
+  commodities:
+    - symbol: GLD
+      name: "SPDR Gold Shares"
+      description: "Gold ETF"
+    - symbol: IAU
+      name: "iShares Gold Trust"
+      description: "Gold ETF (alternative)"
+    - symbol: USO
+      name: "United States Oil Fund"
+      description: "Crude oil ETF"
+    - symbol: BNO
+      name: "United States Brent Oil Fund"
+      description: "Brent crude oil ETF"
+
+  volatility:
+    - symbol: VIXY
+      name: "ProShares VIX Short-Term Futures ETF"
+      description: "VIX short-term futures, tracks volatility expectations"
+
+  inverse_equity:
+    - symbol: SH
+      name: "ProShares Short S&P 500"
+      description: "Inverse S&P 500 ETF (-1x), profits when S&P 500 declines"
+
+# Trading Rules
+rules:
+  # One instrument per account per week
+  max_positions_per_account_per_week: 1
+
+  # Allowed directions
+  directions:
+    - LONG
+    - SHORT
+    - FLAT
+
+  # Allowed horizons
+  horizons:
+    - 1d   # 1 day
+    - 3d   # 3 days
+    - 1w   # 1 week
+
+# Conviction Scale
+conviction:
+  min: -2
+  max: 2
+  description: "Conviction score from -2 (strong SHORT) to +2 (strong LONG), 0 is FLAT"
+
+# Paper Trading Accounts
+accounts:
+  - id: acct_1
+    name: "GPT-5.1 PM"
+    type: individual
+    model: "openai/gpt-5.1"
+
+  - id: acct_2
+    name: "Gemini 3 Pro PM"
+    type: individual
+    model: "google/gemini-3-pro-preview"
+
+  - id: acct_3
+    name: "Sonnet 4.5 PM"
+    type: individual
+    model: "anthropic/claude-sonnet-4.5"
+
+  - id: acct_4
+    name: "Grok PM"
+    type: individual
+    model: "x-ai/grok-4"
+
+  - id: acct_5
+    name: "Council"
+    type: council
+
+  - id: acct_6
+    name: "FLAT Baseline"
+    type: baseline

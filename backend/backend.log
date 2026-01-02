@@ -1,0 +1,122 @@
+/research/llm_trading/backend/main.py:168: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+INFO:     Started server process [576575]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Startup: Listing all registered routes:
+ - /openapi.json [{'GET', 'HEAD'}]
+ - /docs [{'GET', 'HEAD'}]
+ - /docs/oauth2-redirect [{'GET', 'HEAD'}]
+ - /redoc [{'GET', 'HEAD'}]
+ - / [{'GET'}]
+ - /api/research/prompt [{'GET'}]
+ - /api/research/current [{'GET'}]
+ - /api/market/snapshot [{'GET'}]
+ - /api/research/generate [{'POST'}]
+ - /api/research/status [{'GET'}]
+ - /api/research/{job_id} [{'GET'}]
+ - /api/research/verify [{'POST'}]
+ - /api/pitches/current [{'GET'}]
+ - /api/pitches/generate [{'POST'}]
+ - /api/pitches/{id}/approve [{'POST'}]
+ - /api/council/current [{'GET'}]
+ - /api/council/synthesize [{'POST'}]
+ - /api/trades/pending [{'GET'}]
+ - /api/trades/execute [{'POST'}]
+ - /api/positions [{'GET'}]
+ - /api/accounts [{'GET'}]
+ - /api/conversations [{'GET'}]
+ - /api/conversations [{'POST'}]
+ - /api/conversations/{conversation_id} [{'GET'}]
+ - /api/conversations/{conversation_id}/message [{'POST'}]
+ - /api/conversations/{conversation_id}/message/stream [{'POST'}]
+INFO:     127.0.0.1:33590 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33596 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33598 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33612 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57498 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57504 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57514 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57530 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39608 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39620 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39636 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39652 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33758 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33768 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50168 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50184 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50188 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50190 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57854 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57860 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57876 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57884 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56838 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56842 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56852 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56860 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56874 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56880 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56894 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56910 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56922 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56930 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56944 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56950 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56964 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56978 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53810 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53824 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53834 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53840 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53850 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53860 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53870 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53884 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34420 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34430 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34432 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34436 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50702 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50716 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50724 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50726 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53972 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53986 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53998 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54002 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41368 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41376 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41378 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41380 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+/research/llm_trading/backend/main.py:368: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "started_at": datetime.utcnow().isoformat(),
+INFO:     127.0.0.1:50160 - "POST /api/research/generate HTTP/1.1" 200 OK
+/research/llm_trading/backend/main.py:417: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  pipeline_state.jobs[jid]["completed_at"] = datetime.utcnow().isoformat()
+
+============================================================
+📊 RESEARCH STAGE
+============================================================
+
+📡 Fetching market data from Alpaca...
+  ❌ Error fetching market data: Client error '401 Unauthorized' for url 'https://paper-api.alpaca.markets/v2/account'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+📋 Loading research prompt template...
+  ⚠️  Using PROMPT OVERRIDE provided in request
+🔍 Querying Selected Models: ['perplexity', 'gemini']
+  📊 Querying Perplexity Sonar Pro...
+  🧠 Querying Gemini Deep Research...
+  ✅ Perplexity: NEUTRAL
+  ✅ Gemini: NEUTRAL
+INFO:     127.0.0.1:50162 - "GET /api/research/status?job_id=83c02af8-2266-4afb-8bc4-c85e34b4e154 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /api/research/83c02af8-2266-4afb-8bc4-c85e34b4e154 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41848 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41862 - "GET /api/market/snapshot HTTP/1.1" 200 OK

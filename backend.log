@@ -1,0 +1,639 @@
+INFO:     Will watch for changes in these directories: ['/research/llm_trading']
+INFO:     Uvicorn running on http://0.0.0.0:8200 (Press CTRL+C to quit)
+INFO:     Started reloader process [2771952] using WatchFiles
+INFO:     Started server process [2771955]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Startup: Listing all registered routes:
+ - /openapi.json [{'GET', 'HEAD'}]
+ - /docs [{'GET', 'HEAD'}]
+ - /docs/oauth2-redirect [{'GET', 'HEAD'}]
+ - /redoc [{'GET', 'HEAD'}]
+ - / [{'GET'}]
+ - /api/research/prompt [{'GET'}]
+ - /api/research/current [{'GET'}]
+ - /api/market/snapshot [{'GET'}]
+ - /api/research/generate [{'POST'}]
+ - /api/research/status [{'GET'}]
+ - /api/research/{job_id} [{'GET'}]
+ - /api/research/verify [{'POST'}]
+ - /api/pitches/current [{'GET'}]
+ - /api/pitches/generate [{'POST'}]
+ - /api/pitches/{id}/approve [{'POST'}]
+ - /api/council/current [{'GET'}]
+ - /api/council/synthesize [{'POST'}]
+ - /api/trades/pending [{'GET'}]
+ - /api/trades/execute [{'POST'}]
+ - /api/positions [{'GET'}]
+ - /api/accounts [{'GET'}]
+ - /api/conversations [{'GET'}]
+ - /api/conversations [{'POST'}]
+ - /api/conversations/{conversation_id} [{'GET'}]
+ - /api/conversations/{conversation_id}/message [{'POST'}]
+ - /api/conversations/{conversation_id}/message/stream [{'POST'}]
+INFO:     127.0.0.1:55746 - "GET /api/health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38400 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52488 - "GET /api/research/prompt HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2771955]
+INFO:     Started server process [2778506]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Startup: Listing all registered routes:
+ - /openapi.json [{'GET', 'HEAD'}]
+ - /docs [{'GET', 'HEAD'}]
+ - /docs/oauth2-redirect [{'GET', 'HEAD'}]
+ - /redoc [{'GET', 'HEAD'}]
+ - / [{'GET'}]
+ - /api/research/prompt [{'GET'}]
+ - /api/research/current [{'GET'}]
+ - /api/market/snapshot [{'GET'}]
+ - /api/research/generate [{'POST'}]
+ - /api/research/status [{'GET'}]
+ - /api/research/{job_id} [{'GET'}]
+ - /api/research/verify [{'POST'}]
+ - /api/pitches/current [{'GET'}]
+ - /api/pitches/generate [{'POST'}]
+ - /api/pitches/{id}/approve [{'POST'}]
+ - /api/council/current [{'GET'}]
+ - /api/council/synthesize [{'POST'}]
+ - /api/trades/pending [{'GET'}]
+ - /api/trades/execute [{'POST'}]
+ - /api/positions [{'GET'}]
+ - /api/accounts [{'GET'}]
+ - /api/conversations [{'GET'}]
+ - /api/conversations [{'POST'}]
+ - /api/conversations/{conversation_id} [{'GET'}]
+ - /api/conversations/{conversation_id}/message [{'POST'}]
+ - /api/conversations/{conversation_id}/message/stream [{'POST'}]
+INFO:     127.0.0.1:60018 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60024 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60038 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60040 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42380 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42390 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42394 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42406 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44508 - "POST /api/research/generate HTTP/1.1" 200 OK
+
+============================================================
+📊 RESEARCH STAGE
+============================================================
+
+📡 Fetching market data from Alpaca...
+  ⚠️  Could not fetch account info (continuing without it): Client error '401 Unauthorized' for url 'https://paper-api.alpaca.markets/v2/account'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+  ✅ Loaded market data from database for 10 instruments
+📋 Loading research prompt template...
+  ⚠️  Using PROMPT OVERRIDE provided in request
+🔍 Querying Selected Models: ['perplexity', 'gemini']
+  📊 Querying Perplexity Sonar Pro...
+  📊 Querying Perplexity Sonar Deep Research...
+  🧠 Querying Gemini Deep Research...
+  🐛 Gemini API response: {
+  "agent": "deep-research-pro-preview-12-2025",
+  "created": "2026-01-02T01:40:34Z",
+  "id": "v1_ChdFaUpYYWNxYkFkcWxfdU1QdDllNnFBdxIXRWlKWGFjcWJBZHFsX3VNUHQ5ZTZxQXc",
+  "object": "interaction",
+  "role": "agent",
+  "status": "in_progress",
+  "updated": "2026-01-02T01:40:34Z"
+}
+  ✅ Gemini interaction ID: v1_ChdFaUpYYWNxYkFkcWxfdU1QdDllNnFBdxIXRWlKWGFjcWJBZHFsX3VNUHQ5ZTZxQXc
+  🧠 Gemini Deep Research started. ID: v1_ChdFaUpYYWNxYkFkcWxfdU1QdDllNnFBdxIXRWlKWGFjcWJBZHFsX3VNUHQ5ZTZxQXc
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:44516 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44524 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43806 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43814 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:43820 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43836 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44078 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44080 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44082 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:44096 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52166 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52170 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52182 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:52186 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44574 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44586 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44592 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:44598 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57262 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57276 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57292 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:57304 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50300 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50304 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50320 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:50328 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60474 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60476 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60480 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:60490 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44758 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44764 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44772 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:44774 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51138 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51142 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51154 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:51162 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58576 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58580 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58588 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:58600 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57180 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57196 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57206 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:57220 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55510 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55518 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55524 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55528 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:46448 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46452 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46460 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46470 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:44240 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44244 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44258 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44274 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:45514 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ✅ Perplexity Sonar Deep Research completed!
+INFO:     127.0.0.1:45528 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45540 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45554 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:59392 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59398 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59404 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59420 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:52202 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52204 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52212 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52216 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:41902 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41918 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41930 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41940 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36838 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:36846 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36854 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36856 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42548 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:42554 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42556 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42568 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57828 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:57830 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57832 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57834 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52434 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:52442 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52450 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52464 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53652 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:53662 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53666 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53674 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33368 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:33384 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33386 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33402 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33612 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:33614 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33624 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33630 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57680 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57684 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:57692 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57694 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45576 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45586 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:45598 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45614 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54280 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54286 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:54294 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54302 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34612 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34614 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:34622 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34632 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54962 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54972 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:54988 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55004 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50146 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50156 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:50158 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50162 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39370 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39372 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39388 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:39390 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54440 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54442 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54458 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:54472 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45946 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45950 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45964 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  ⏳ Gemini Deep Research polling... (state: in_progress)
+INFO:     127.0.0.1:45978 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54604 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54606 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54612 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+  🧠 Gemini Deep Research completed!
+  ✅ Perplexity: NEUTRAL
+  💾 Saved perplexity research to database (ID: 18f0e8f8-c580-45be-acc1-4b2969b1d377)
+  ✅ Gemini: RISK_OFF
+  💾 Saved gemini research to database (ID: b6af8d9f-8cff-4549-8ad0-1214bc2f42a0)
+INFO:     127.0.0.1:54620 - "GET /api/research/status?job_id=92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54622 - "GET /api/research/92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51780 - "GET /api/research/status HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:50214 - "GET /api/research/92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54986 - "GET /api/research/92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54996 - "GET /api/research/92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46692 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46702 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46704 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46720 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49576 - "GET /api/research/92718c59-3ff7-4581-ae56-0a7653304f51 HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2778506]
+INFO:     Started server process [2895746]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Startup: Listing all registered routes:
+ - /openapi.json [{'HEAD', 'GET'}]
+ - /docs [{'HEAD', 'GET'}]
+ - /docs/oauth2-redirect [{'HEAD', 'GET'}]
+ - /redoc [{'HEAD', 'GET'}]
+ - / [{'GET'}]
+ - /api/research/prompt [{'GET'}]
+ - /api/research/current [{'GET'}]
+ - /api/market/snapshot [{'GET'}]
+ - /api/research/generate [{'POST'}]
+ - /api/research/status [{'GET'}]
+ - /api/research/{job_id} [{'GET'}]
+ - /api/research/verify [{'POST'}]
+ - /api/research/history [{'GET'}]
+ - /api/pitches/current [{'GET'}]
+ - /api/pitches/generate [{'POST'}]
+ - /api/pitches/{id}/approve [{'POST'}]
+ - /api/council/current [{'GET'}]
+ - /api/council/synthesize [{'POST'}]
+ - /api/trades/pending [{'GET'}]
+ - /api/trades/execute [{'POST'}]
+ - /api/positions [{'GET'}]
+ - /api/accounts [{'GET'}]
+ - /api/conversations [{'GET'}]
+ - /api/conversations [{'POST'}]
+ - /api/conversations/{conversation_id} [{'GET'}]
+ - /api/conversations/{conversation_id}/message [{'POST'}]
+ - /api/conversations/{conversation_id}/message/stream [{'POST'}]
+INFO:     127.0.0.1:33202 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33204 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33208 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33218 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55082 - "GET /api/research/history?days=30 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55096 - "GET /api/research/history HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54640 - "GET /api/research/history HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60818 - "GET /api/research/history HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45946 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45956 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45962 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45976 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2895746]
+INFO:     Started server process [2933900]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Startup: Listing all registered routes:
+ - /openapi.json [{'GET', 'HEAD'}]
+ - /docs [{'GET', 'HEAD'}]
+ - /docs/oauth2-redirect [{'GET', 'HEAD'}]
+ - /redoc [{'GET', 'HEAD'}]
+ - / [{'GET'}]
+ - /api/research/prompt [{'GET'}]
+ - /api/research/current [{'GET'}]
+ - /api/market/snapshot [{'GET'}]
+ - /api/research/generate [{'POST'}]
+ - /api/research/status [{'GET'}]
+ - /api/research/history [{'GET'}]
+ - /api/research/{job_id} [{'GET'}]
+ - /api/research/verify [{'POST'}]
+ - /api/pitches/current [{'GET'}]
+ - /api/pitches/generate [{'POST'}]
+ - /api/pitches/{id}/approve [{'POST'}]
+ - /api/council/current [{'GET'}]
+ - /api/council/synthesize [{'POST'}]
+ - /api/trades/pending [{'GET'}]
+ - /api/trades/execute [{'POST'}]
+ - /api/positions [{'GET'}]
+ - /api/accounts [{'GET'}]
+ - /api/conversations [{'GET'}]
+ - /api/conversations [{'POST'}]
+ - /api/conversations/{conversation_id} [{'GET'}]
+ - /api/conversations/{conversation_id}/message [{'POST'}]
+ - /api/conversations/{conversation_id}/message/stream [{'POST'}]
+Error fetching research history: name 'os' is not defined
+INFO:     127.0.0.1:57084 - "GET /api/research/history HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2933900]
+INFO:     Started server process [2935959]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Startup: Listing all registered routes:
+ - /openapi.json [{'HEAD', 'GET'}]
+ - /docs [{'HEAD', 'GET'}]
+ - /docs/oauth2-redirect [{'HEAD', 'GET'}]
+ - /redoc [{'HEAD', 'GET'}]
+ - / [{'GET'}]
+ - /api/research/prompt [{'GET'}]
+ - /api/research/current [{'GET'}]
+ - /api/market/snapshot [{'GET'}]
+ - /api/research/generate [{'POST'}]
+ - /api/research/status [{'GET'}]
+ - /api/research/history [{'GET'}]
+ - /api/research/{job_id} [{'GET'}]
+ - /api/research/verify [{'POST'}]
+ - /api/pitches/current [{'GET'}]
+ - /api/pitches/generate [{'POST'}]
+ - /api/pitches/{id}/approve [{'POST'}]
+ - /api/council/current [{'GET'}]
+ - /api/council/synthesize [{'POST'}]
+ - /api/trades/pending [{'GET'}]
+ - /api/trades/execute [{'POST'}]
+ - /api/positions [{'GET'}]
+ - /api/accounts [{'GET'}]
+ - /api/conversations [{'GET'}]
+ - /api/conversations [{'POST'}]
+ - /api/conversations/{conversation_id} [{'GET'}]
+ - /api/conversations/{conversation_id}/message [{'POST'}]
+ - /api/conversations/{conversation_id}/message/stream [{'POST'}]
+Error fetching research history: name 'os' is not defined
+INFO:     127.0.0.1:41856 - "GET /api/research/history HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2935959]
+INFO:     Started server process [2937092]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Startup: Listing all registered routes:
+ - /openapi.json [{'HEAD', 'GET'}]
+ - /docs [{'HEAD', 'GET'}]
+ - /docs/oauth2-redirect [{'HEAD', 'GET'}]
+ - /redoc [{'HEAD', 'GET'}]
+ - / [{'GET'}]
+ - /api/research/prompt [{'GET'}]
+ - /api/research/current [{'GET'}]
+ - /api/market/snapshot [{'GET'}]
+ - /api/research/generate [{'POST'}]
+ - /api/research/status [{'GET'}]
+ - /api/research/history [{'GET'}]
+ - /api/research/{job_id} [{'GET'}]
+ - /api/research/verify [{'POST'}]
+ - /api/pitches/current [{'GET'}]
+ - /api/pitches/generate [{'POST'}]
+ - /api/pitches/{id}/approve [{'POST'}]
+ - /api/council/current [{'GET'}]
+ - /api/council/synthesize [{'POST'}]
+ - /api/trades/pending [{'GET'}]
+ - /api/trades/execute [{'POST'}]
+ - /api/positions [{'GET'}]
+ - /api/accounts [{'GET'}]
+ - /api/conversations [{'GET'}]
+ - /api/conversations [{'POST'}]
+ - /api/conversations/{conversation_id} [{'GET'}]
+ - /api/conversations/{conversation_id}/message [{'POST'}]
+ - /api/conversations/{conversation_id}/message/stream [{'POST'}]
+INFO:     127.0.0.1:42548 - "GET /api/research/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47666 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47672 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47674 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47690 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37300 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37316 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37276 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37290 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37300 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37316 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37332 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37334 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48492 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48496 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48502 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48518 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51250 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51252 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'backend/main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2937092]
+INFO:     Started server process [3602017]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Startup: Listing all registered routes:
+ - /openapi.json [{'GET', 'HEAD'}]
+ - /docs [{'GET', 'HEAD'}]
+ - /docs/oauth2-redirect [{'GET', 'HEAD'}]
+ - /redoc [{'GET', 'HEAD'}]
+ - / [{'GET'}]
+ - /api/research/prompt [{'GET'}]
+ - /api/research/current [{'GET'}]
+ - /api/market/snapshot [{'GET'}]
+ - /api/research/generate [{'POST'}]
+ - /api/research/status [{'GET'}]
+ - /api/research/history [{'GET'}]
+ - /api/research/{job_id} [{'GET'}]
+ - /api/research/verify [{'POST'}]
+ - /api/research/report/{report_id} [{'GET'}]
+ - /api/pitches/current [{'GET'}]
+ - /api/pitches/generate [{'POST'}]
+ - /api/pitches/{id}/approve [{'POST'}]
+ - /api/council/current [{'GET'}]
+ - /api/council/synthesize [{'POST'}]
+ - /api/trades/pending [{'GET'}]
+ - /api/trades/execute [{'POST'}]
+ - /api/positions [{'GET'}]
+ - /api/accounts [{'GET'}]
+ - /api/conversations [{'GET'}]
+ - /api/conversations [{'POST'}]
+ - /api/conversations/{conversation_id} [{'GET'}]
+ - /api/conversations/{conversation_id}/message [{'POST'}]
+ - /api/conversations/{conversation_id}/message/stream [{'POST'}]
+INFO:     127.0.0.1:35374 - "GET /api/research/report/18f0e8f8-c580-45be-acc1-4b2969b1d377 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49914 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49930 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49934 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49940 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49956 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49972 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49980 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49988 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52098 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52114 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52122 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35510 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59274 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42872 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42878 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42892 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42908 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42916 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42930 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42934 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42946 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34298 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34302 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34312 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34316 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34318 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34330 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34338 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34346 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34358 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34360 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34364 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58092 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42068 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51486 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44830 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44836 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44846 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44862 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44876 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44890 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57372 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36584 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36596 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36610 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36620 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36632 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36646 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58536 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58540 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58550 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58558 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58562 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58578 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58594 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58608 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58610 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59276 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59278 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59282 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59286 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59296 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59312 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59328 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49388 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49396 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49410 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49416 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49420 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49422 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37536 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42460 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42474 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42482 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60712 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60728 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60738 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60746 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60748 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60750 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42970 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42972 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42982 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42992 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42996 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43006 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43016 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43030 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43032 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43044 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43056 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43058 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59364 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42820 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42828 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42844 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42852 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42868 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42872 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42880 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42894 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42908 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42914 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42922 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42938 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57786 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40460 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59248 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51356 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51358 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51364 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51376 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51388 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51392 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42948 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42960 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41168 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41174 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41184 - "GET /api/research/history?days=90 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41190 - "GET /api/research/prompt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41192 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41204 - "GET /api/market/snapshot HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41208 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48964 - "GET /api/research/report/b6af8d9f-8cff-4549-8ad0-1214bc2f42a0 HTTP/1.1" 200 OK

@@ -1,0 +1,41 @@
+# Schedule Configuration
+# Defines when the weekly pipeline runs and daily checkpoint times
+
+schedule:
+  timezone: "America/New_York"
+
+  # Weekly pipeline day (typically Wednesday)
+  weekly_day: "Wednesday"
+  weekly_time: "08:00"  # Run before market open
+
+# Daily Checkpoints
+checkpoints:
+  - time: "09:00"
+    name: "Morning Check"
+    description: "Pre-market assessment"
+  - time: "12:00"
+    name: "Midday Check"
+    description: "Lunchtime assessment"
+  - time: "14:00"
+    name: "Afternoon Check"
+    description: "Afternoon assessment"
+  - time: "15:50"
+    name: "Close Check"
+    description: "Near market close assessment"
+
+# Checkpoint Actions
+checkpoint_actions:
+  - STAY      # Maintain current position
+  - EXIT      # Close position
+  - FLIP      # Reverse direction (LONG -> SHORT or SHORT -> LONG)
+  - REDUCE    # Reduce position size
+
+# Hard rule: No new research sources during the week
+rules:
+  no_new_research_mid_week: true
+  research_day_only: true
+
+# Postmortem Schedule
+postmortem:
+  day: "Wednesday"  # Run postmortem before new weekly cycle
+  time: "07:30"     # Run before weekly pipeline
