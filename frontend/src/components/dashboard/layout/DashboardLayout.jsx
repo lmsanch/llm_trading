@@ -24,7 +24,7 @@ export function DashboardLayout() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header mode={mode} setMode={setMode} />
-      
+
       <div className="border-b bg-muted/40">
         <div className="flex px-4">
           {tabs.map((tab) => (

@@ -13,9 +13,9 @@ This project extends Andrej Karpathy's `llm-council` pattern into a **headless p
 ### Key Innovation
 
 ```
-Research Layer (2 Analysts)
+Research Layer (2 Analysts) <--changed to 1 Perplexity Sonar Deep Research>
     ↓
-PM Layer (4 PMs via OpenRouter)
+PM Layer (5 PMs via Requesty)
     ↓
 Anonymous Peer Review Layer
     ↓
@@ -146,7 +146,7 @@ Week End
 | Acct 3 | Sonnet 4.5 PM trade |
 | Acct 4 | Grok PM trade |
 | Acct 5 | Chairman Council trade |
-| Acct 6 | FLAT baseline |
+| Acct 6 | Deepseek|
 
 ### Council Pipeline Schema Files
 
@@ -182,7 +182,7 @@ Week End
 
 ```bash
 # Required
-OPENROUTER_API_KEY=sk-or-v1-...
+REQUSTY_API_KEY=...
 APCA_API_KEY_ID=...
 APCA_API_SECRET_KEY=...
 

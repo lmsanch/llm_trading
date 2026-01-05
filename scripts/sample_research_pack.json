@@ -1,0 +1,88 @@
+{
+    "week_id": "2026-01-05",
+    "asof_et": "2026-01-02 10:00:00",
+    "top_narratives": [
+        {
+            "name": "AI CapEx Boom",
+            "why_this_week": [
+                "NVDA earnings preview",
+                "TSMC monthly sales"
+            ],
+            "falsifiers_this_week": [
+                "Miss in cloud capex guidance"
+            ]
+        },
+        "Fed Pivot Pause"
+    ],
+    "event_calendar": [
+        {
+            "date": "2026-01-09",
+            "event": "Non-Farm Payrolls",
+            "impact": "CRITICAL",
+            "affected_assets": [
+                "SPY",
+                "TLT",
+                "UUP",
+                "GLD"
+            ],
+            "expected_outcome": "DATA > 200k -> YIELDS UP"
+        },
+        {
+            "date": "2026-01-07",
+            "event": "FOMC Minutes",
+            "impact": "HIGH",
+            "affected_assets": [
+                "TLT",
+                "SPY"
+            ],
+            "why_matters_this_week": "Hawkish tone risk"
+        }
+    ],
+    "asset_setups": [
+        {
+            "ticker": "SPY",
+            "watch_indicators": [
+                {
+                    "name": "50d MA Support",
+                    "type": "TECHNICAL",
+                    "check_frequency": "INTRADAY",
+                    "bullish_condition": "Price > 50d MA",
+                    "bearish_condition": "Close < 50d MA"
+                }
+            ],
+            "scenario_map": [
+                {
+                    "label": "Goldilocks Print",
+                    "if": "NFP 150k-180k",
+                    "expected_vs_spy": "POSITIVE"
+                },
+                {
+                    "label": "Hot Print",
+                    "if": "NFP > 250k",
+                    "expected_vs_spy": "NEGATIVE"
+                }
+            ]
+        },
+        {
+            "ticker": "TLT",
+            "scenario_map": [
+                {
+                    "label": "Yield Spike",
+                    "if": "NFP > 220k",
+                    "expected_vs_spy": "NEGATIVE"
+                }
+            ]
+        }
+    ],
+    "named_entities": {
+        "companies": [
+            "NVDA",
+            "TSMC",
+            "Microsoft"
+        ],
+        "commodities": [
+            "Gold",
+            "Oil"
+        ]
+    }
+}

@@ -22,7 +22,7 @@ REQUESTY_API_KEY = os.getenv("REQUESTY_API_KEY")
 REQUESTY_MODELS = {
     # PM Layer (Portfolio Managers)
     'chatgpt': {
-        'model_id': 'openai/gpt-5.2',
+        'model_id': 'openai/gpt-5.1',
         'account': 'CHATGPT',
         'alpaca_id': 'PA3IUYCYRWGK',
         'role': 'portfolio_manager'
@@ -34,7 +34,7 @@ REQUESTY_MODELS = {
         'role': 'portfolio_manager'
     },
     'groq': {
-        'model_id': 'xai/grok-4-1-fast-non-reasoning',
+        'model_id': 'xai/grok-4-fast',
         'account': 'GROQ',
         'alpaca_id': 'PA33MEQA4WT7',
         'role': 'portfolio_manager'
@@ -46,7 +46,7 @@ REQUESTY_MODELS = {
         'role': 'portfolio_manager'
     },
     'deepseek': {
-        'model_id': 'deepseek-ai/DeepSeek-V3',
+        'model_id': 'deepinfra/deepseek-ai/DeepSeek-V3',
         'account': 'DEEPSEEK',
         'alpaca_id': 'PA3KKW3TN54V',
         'role': 'portfolio_manager'
@@ -178,21 +178,24 @@ async def query_models_parallel(
 
 async def query_pm_models(
     messages: List[Dict[str, str]],
-    max_tokens: int = 2000,
-    temperature: float = 0.7
+    max_tokens: int = 4000,
+    temperature: float = 0.7,
+    model_keys: Optional[List[str]] = None
 ) -> Dict[str, Optional[Dict[str, Any]]]:
     """
-    Query all PM models in parallel.
+    Query PM models in parallel.
     
     Args:
         messages: List of message dicts
         max_tokens: Maximum tokens in response
         temperature: Sampling temperature
+        model_keys: Optional list of model keys to query (default: all PM models)
     
     Returns:
         Dict mapping PM model key to response dict
     """
-    return await query_models_parallel(PM_MODELS, messages, max_tokens, temperature)
+    target_models = model_keys if model_keys else PM_MODELS
+    return await query_models_parallel(target_models, messages, max_tokens, temperature)
 
 
 async def query_chairman(

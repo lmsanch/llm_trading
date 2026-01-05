@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://llm-trading.local/schemas/execution_order.schema.json",
+  "title": "Execution Order Schema",
+  "description": "Broker-ready order object with entry and exit policy (v2 - percent-based stops)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["symbol", "side", "order_type", "time_in_force", "limit_price", "exit_policy"],
+  "properties": {
+    "symbol": {
+      "type": "string",
+      "description": "ETF ticker symbol from approved instrument list",
+      "pattern": "^(SPY|QQQ|IWM|TLT|HYG|UUP|GLD|USO|VIXY|SH)$"
+    },
+    "side": {
+      "type": "string",
+      "enum": ["buy", "sell"],
+      "description": "Order side: buy for LONG, sell for SHORT"
+    },
+    "order_type": {
+      "type": "string",
+      "enum": ["market", "limit"],
+      "description": "Order type: market (immediate execution) or limit (price-specific)"
+    },
+    "time_in_force": {
+      "type": "string",
+      "enum": ["day"],
+      "description": "Time in force: day (good for current trading day only)"
+    },
+    "limit_price": {
+      "type": ["number", "null"],
+      "description": "Limit price (required for limit orders, null for market orders)",
+      "minimum": 0
+    },
+    "exit_policy": {
+      "type": "object",
+      "description": "Exit policy with percent-based stops (computed at execution time)",
+      "additionalProperties": false,
+      "required": ["time_stop_days", "stop_loss_pct"],
+      "properties": {
+        "time_stop_days": {
+          "type": "integer",
+          "enum": [7],
+          "description": "Maximum holding period in days (v1: always 7 for weekly trades)"
+        },
+        "stop_loss_pct": {
+          "type": "number",
+          "minimum": 0.005,
+          "maximum": 0.05,
+          "description": "Stop-loss as percentage of entry price (0.015 = 1.5%)"
+        },
+        "take_profit_pct": {
+          "type": ["number", "null"],
+          "minimum": 0.005,
+          "maximum": 0.10,
+          "description": "Take-profit as percentage of entry price (null = no TP target)"
+        },
+        "exit_before_events": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["NFP", "CPI", "FOMC"]
+          },
+          "default": [],
+          "description": "Exit position before these high-impact events"
+        }
+      }
+    }
+  }
+}

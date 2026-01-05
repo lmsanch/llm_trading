@@ -18,9 +18,11 @@ import {
   ChevronRight,
   ShieldCheck,
   Edit2,
-  TrendingUp
+  TrendingUp,
+  Share2
 } from 'lucide-react';
 import { mockResearchPacks } from '../../../lib/mockData';
+import WeeklyGraphViewer from '../../WeeklyGraphViewer';
 
 // Session storage keys
 const STORAGE_KEYS = {
@@ -64,8 +66,7 @@ export default function ResearchTab() {
   const [selectedModels, setSelectedModels] = useState(() => {
     const stored = sessionStorage.getItem(STORAGE_KEYS.SELECTED_MODELS);
     return stored ? JSON.parse(stored) : {
-      perplexity: false,
-      gemini: false
+      perplexity: true
     };
   });
   const [selectedReport, setSelectedReport] = useState(null);
@@ -368,31 +369,21 @@ export default function ResearchTab() {
                 {/* Orchestration Setup - MOVED BELOW CALENDAR */}
                 <Card className="border-border/60 shadow-sm bg-card/50 backdrop-blur-sm">
                   <CardHeader className="py-3 px-4 border-b">
-                    <CardTitle className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Orchestration Setup</CardTitle>
+                    <CardTitle className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Research Provider</CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 space-y-3">
-                    {[
-                      { id: 'perplexity', name: 'Perplexity Sonar Deep Research', desc: 'Agentic web search with exhaustive source synthesis' },
-                      { id: 'gemini', name: 'Gemini Deep Research 3.0', desc: 'Multi-step reasoning with Google Search integration' }
-                    ].map(m => (
-                      <div
-                        key={m.id}
-                        onClick={() => setSelectedModelsWithPersist(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
-                        className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer select-none ${selectedModels[m.id] ? 'border-primary/30 bg-primary/5 shadow-inner' : 'border-transparent bg-muted/20 grayscale'}`}
-                      >
-                        <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${selectedModels[m.id] ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
-                          {selectedModels[m.id] && <CheckCheck className="h-3 w-3 text-white stroke-[3]" />}
-                        </div>
-                        <div className="space-y-1">
-                          <span className="text-[13px] font-bold leading-none">{m.name}</span>
-                          <p className="text-[10px] text-muted-foreground/80 leading-normal">{m.desc}</p>
-                        </div>
+                    <div className="flex items-start gap-4 p-4 rounded-xl border-2 border-primary/30 bg-primary/5 shadow-inner">
+                      <div className="mt-0.5 w-5 h-5 rounded-full border-2 bg-primary border-primary flex items-center justify-center">
+                        <CheckCheck className="h-3 w-3 text-white stroke-[3]" />
                       </div>
-                    ))}
+                      <div className="space-y-1">
+                        <span className="text-[13px] font-bold leading-none">Perplexity Sonar Deep Research</span>
+                        <p className="text-[10px] text-muted-foreground/80 leading-normal">Agentic web search with exhaustive source synthesis</p>
+                      </div>
+                    </div>
                     <div className="pt-6 space-y-3">
                       <Button
                         onClick={handleSendResearch}
-                        disabled={!selectedModels.perplexity && !selectedModels.gemini}
                         className="w-full h-12 rounded-xl text-base font-bold shadow-xl shadow-primary/20 hover:translate-y-[-2px] active:translate-y-[0px] transition-all"
                       >
                         <Play className="mr-2 h-5 w-5 fill-current" />
@@ -424,27 +415,20 @@ export default function ResearchTab() {
     return (
       <div className="space-y-10 py-12">
         <Header status="EXECUTING..." />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto px-4">
-          {['perplexity', 'gemini'].map(id => {
-            if (!selectedModels[id]) return null;
-            const status = pollingStatus?.[id] || { status: 'pending', progress: 0, message: 'Queueing task...' };
+        <div className="flex justify-center max-w-2xl mx-auto px-4">
+          {(() => {
+            const status = pollingStatus?.perplexity || { status: 'pending', progress: 0, message: 'Queueing task...' };
             const isComplete = status.status === 'complete';
 
             return (
-              <Card key={id} className="border-primary/20 overflow-hidden shadow-2xl bg-card">
+              <Card className="border-primary/20 overflow-hidden shadow-2xl bg-card w-full">
                 <CardHeader className="pb-4 border-b bg-muted/5 px-6 pt-6">
                   <div className="flex justify-between items-center">
                     <CardTitle className="text-lg font-bold flex items-center gap-3">
-                      {id === 'perplexity' ? (
-                        <svg viewBox="0 0 24 24" className="w-8 h-8" fill="currentColor">
-                          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" className="w-8 h-8 text-blue-500" fill="currentColor">
-                          <circle cx="12" cy="12" r="10" />
-                        </svg>
-                      )}
-                      {id === 'perplexity' ? 'Perplexity Sonar Deep Research' : 'Gemini Deep Research 3.0'}
+                      <svg viewBox="0 0 24 24" className="w-8 h-8" fill="currentColor">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                      </svg>
+                      Perplexity Sonar Deep Research
                     </CardTitle>
                     {isComplete ? (
                       <Badge variant="success" className="bg-green-500/10 text-green-500 border-green-500/20 px-3 py-1 font-bold">READY</Badge>
@@ -472,7 +456,7 @@ export default function ResearchTab() {
                 </CardContent>
               </Card>
             );
-          })}
+          })()}
         </div>
         <div className="flex flex-col items-center gap-6 pt-8 animate-in fade-in slide-in-from-bottom-2 duration-1000 delay-500">
           <div className="flex items-center gap-3 py-2 px-6 rounded-full bg-muted/50 border shadow-sm">
@@ -511,7 +495,7 @@ export default function ResearchTab() {
   }
 
   // COMPLETE STATE
-  const { perplexity, gemini, market_snapshot: ms } = researchData || mockResearchPacks;
+  const { perplexity, market_snapshot: ms } = researchData || mockResearchPacks;
   const instruments = promptData?.instruments || ["SPY", "QQQ", "IWM", "TLT", "HYG", "UUP", "GLD", "USO", "VIXY", "SH"];
 
   return (
@@ -526,10 +510,17 @@ export default function ResearchTab() {
           </div>
         )}
 
-        {/* Result Cards Grid */}
-        <div className={`grid grid-cols-1 ${selectedModels.perplexity && selectedModels.gemini ? "2xl:grid-cols-2" : "max-w-5xl mx-auto"} gap-10 pt-4`}>
-          {selectedModels.perplexity && <ResearchPackCard data={perplexity} />}
-          {selectedModels.gemini && <ResearchPackCard data={gemini} />}
+        {/* Knowledge Graph View */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 px-2">
+            <Share2 className="h-3 w-3" /> Macro Knowledge Graph
+          </h3>
+          <WeeklyGraphViewer src="/data/weekly_graph.json" />
+        </div>
+
+        {/* Result Card - Single Perplexity */}
+        <div className="max-w-5xl mx-auto pt-4">
+          {perplexity && <ResearchPackCard data={perplexity} />}
         </div>
 
         {/* Persistent Action Bar */}
@@ -556,13 +547,13 @@ export default function ResearchTab() {
         </div>
       </div>
 
-    {/* Research Report Modal */}
-    {selectedReport && (
-      <ResearchReportModal
-        report={selectedReport}
-        onClose={() => setSelectedReport(null)}
-      />
-    )}
-  </>
+      {/* Research Report Modal */}
+      {selectedReport && (
+        <ResearchReportModal
+          report={selectedReport}
+          onClose={() => setSelectedReport(null)}
+        />
+      )}
+    </>
   );
 }

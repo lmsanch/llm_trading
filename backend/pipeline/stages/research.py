@@ -12,6 +12,7 @@ from psycopg2.extras import Json
 
 from ...research import query_perplexity_research, query_gemini_research
 from ...storage.data_fetcher import MarketDataManager
+from ..graph_extractor import extract_graph
 from ..context import PipelineContext, ContextKey
 from ..base import Stage
 
@@ -29,13 +30,13 @@ class ResearchStage(Stage):
     This stage:
     1. Fetches current market data from Alpaca
     2. Loads research prompt from markdown file
-    3. Queries BOTH Perplexity and Gemini in parallel
+    3. Queries Perplexity for deep research
     4. Returns natural language reports + structured JSON
     """
 
     def __init__(self, selected_models: list = None, prompt_override: str = None):
         super().__init__()
-        self.selected_models = selected_models or ["perplexity", "gemini"]
+        self.selected_models = selected_models or ["perplexity"]
         self.prompt_override = prompt_override
 
     @property
@@ -308,6 +309,18 @@ JSON format:
             model = research_result.get('model', 'unknown')
             natural_language = research_result.get('natural_language', '')
             structured_json = research_result.get('structured_json', {})
+            
+            # --- AUTO-GENERATE KNOWLEDGE GRAPH ---
+            try:
+                # Add metadata for extractor
+                research_result['week_id'] = week_id
+                graph_data = extract_graph(research_result)
+                structured_json['weekly_graph'] = graph_data
+                print(f"  🕸️ Generated knowledge graph with {len(graph_data.get('nodes',[]))} nodes")
+            except Exception as ge:
+                print(f"  ⚠️ Failed to generate knowledge graph: {ge}")
+            # -------------------------------------
+
             status = 'error' if research_result.get('error') else 'complete'
             error_message = research_result.get('error')
             generated_at = research_result.get('generated_at')

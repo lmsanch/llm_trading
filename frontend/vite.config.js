@@ -10,7 +10,7 @@ export default defineConfig({
     strictPort: true,  // Don't try other ports if 4173 is taken
     proxy: {
       '/api': {
-        target: 'http://localhost:8200',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },

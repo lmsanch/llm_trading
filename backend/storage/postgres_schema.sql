@@ -44,6 +44,44 @@ CREATE TABLE IF NOT EXISTS hourly_snapshots (
 CREATE INDEX IF NOT EXISTS idx_hourly_snapshots_symbol_timestamp ON hourly_snapshots(symbol, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_hourly_snapshots_date ON hourly_snapshots(date DESC);
 
+-- Daily log returns: ln(close_t / close_t-1)
+CREATE TABLE IF NOT EXISTS daily_log_returns (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+    log_return DECIMAL(12,8),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(symbol, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_log_returns_symbol_date ON daily_log_returns(symbol, date DESC);
+
+-- 7-day rolling log returns: ln(close_t / close_t-7)
+CREATE TABLE IF NOT EXISTS rolling_7day_log_returns (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+    log_return_7d DECIMAL(12,8),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(symbol, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rolling_7day_log_returns_symbol_date ON rolling_7day_log_returns(symbol, date DESC);
+
+-- Correlation matrix (30-day window of 7-day log returns)
+CREATE TABLE IF NOT EXISTS correlation_matrix (
+    id SERIAL PRIMARY KEY,
+    date DATE NOT NULL,
+    symbol_1 VARCHAR(10) NOT NULL,
+    symbol_2 VARCHAR(10) NOT NULL,
+    correlation DECIMAL(12,8),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(date, symbol_1, symbol_2)
+);
+
+CREATE INDEX IF NOT EXISTS idx_correlation_matrix_date ON correlation_matrix(date DESC);
+CREATE INDEX IF NOT EXISTS idx_correlation_matrix_symbols ON correlation_matrix(symbol_1, symbol_2, date DESC);
+
 -- ============================================================================
 -- RESEARCH REPORTS (RAW STORAGE)
 -- ============================================================================
@@ -98,12 +136,16 @@ CREATE TABLE IF NOT EXISTS pm_pitches (
     direction VARCHAR(10),
     conviction DECIMAL(4,2),
 
+    -- Research report association
+    research_date TIMESTAMPTZ,
+
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_pm_pitches_week ON pm_pitches(week_id);
 CREATE INDEX IF NOT EXISTS idx_pm_pitches_account ON pm_pitches(account);
 CREATE INDEX IF NOT EXISTS idx_pm_pitches_instrument ON pm_pitches(instrument);
+CREATE INDEX IF NOT EXISTS idx_pm_pitches_research_date ON pm_pitches(research_date);
 
 -- ============================================================================
 -- PEER REVIEWS (RAW STORAGE)

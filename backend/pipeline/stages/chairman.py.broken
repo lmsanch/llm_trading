@@ -19,7 +19,7 @@ CHAIRMAN_DECISION = ContextKey("chairman_decision")
 class ChairmanStage(Stage):
     """
     Chairman synthesis stage that creates final council trade decision.
-
+    
     This stage:
     1. Receives all PM pitches and peer reviews
     2. Uses Claude Opus 4.5 to synthesize
@@ -27,80 +27,78 @@ class ChairmanStage(Stage):
     4. Includes dissent notes from minority views
     5. Provides monitoring plan for checkpoints
     """
-
+    
     # Tradable universe
     INSTRUMENTS = ["SPY", "QQQ", "IWM", "TLT", "HYG", "UUP", "GLD", "USO", "VIXY", "SH"]
-
+    
     # Conviction scale
     CONVICTION_MIN = -2
     CONVICTION_MAX = 2
-
+    
     @property
     def name(self) -> str:
         return "ChairmanStage"
-
+    
     async def execute(self, context: PipelineContext) -> PipelineContext:
         """
         Execute chairman synthesis stage.
-
+        
         Args:
             context: Pipeline context with PM pitches and peer reviews
-
+            
         Returns:
             New context with chairman decision added
         """
         print("\n" + "=" * 60)
         print("👑 CHAIRMAN SYNTHESIS STAGE")
         print("=" * 60)
-
+        
         # Get PM pitches and peer reviews from context
         pm_pitches = context.get(PM_PITCHES)
         peer_reviews = context.get(PEER_REVIEWS)
         label_to_model = context.get(LABEL_TO_MODEL, {})
-
+        
         if not pm_pitches or not peer_reviews:
             print("  ❌ Error: PM pitches or peer reviews not found in context")
             return context
-
+        
         print(f"\n📋 Synthesizing {len(pm_pitches)} PM pitches")
         print(f"👥 Considering {len(peer_reviews)} peer reviews")
-
+        
         # Generate chairman decision
         print("\n🧠 Generating council decision...")
         chairman_decision = await self._generate_chairman_decision(
-            pm_pitches, peer_reviews, label_to_model
+            pm_pitches,
+            peer_reviews,
+            label_to_model
         )
-
-        print(
-            f"  ✅ Council decision: {chairman_decision['instrument']} {chairman_decision['direction']}"
-        )
-        print(
-            f"  Conviction: {chairman_decision['conviction']} | Horizon: {chairman_decision['horizon']}"
-        )
-
+        
+        print(f"  ✅ Council decision: {chairman_decision['instrument']} {chairman_decision['direction']}")
+        print(f"  Conviction: {chairman_decision['conviction']} | Horizon: {chairman_decision['horizon']}")
+        
         # Return context with chairman decision
         return context.set(CHAIRMAN_DECISION, chairman_decision)
-
+    
     async def _generate_chairman_decision(
         self,
         pm_pitches: List[Dict[str, Any]],
         peer_reviews: List[Dict[str, Any]],
-        label_to_model: Dict[str, str],
+        label_to_model: Dict[str, str]
     ) -> Dict[str, Any]:
         """
         Generate chairman decision using Claude Opus 4.5.
-
+        
         Args:
             pm_pitches: List of PM pitch dicts
             peer_reviews: List of peer review dicts
             label_to_model: Mapping from label to model
-
+            
         Returns:
             Chairman decision dict
         """
         # Build prompt for chairman
         prompt = self._build_chairman_prompt(pm_pitches, peer_reviews, label_to_model)
-
+        
         messages = [
             {
                 "role": "system",
@@ -120,90 +118,64 @@ Focus on:
 - Clear exit criteria
 - Practical execution considerations
 
-Be decisive but thorough. Acknowledge dissent where appropriate.""",
+Be decisive but thorough. Acknowledge dissent where appropriate."""
             },
-            {"role": "user", "content": prompt},
+            {
+                "role": "user",
+                "content": prompt
+            }
         ]
-
+        
         # Query chairman model
         response = await query_chairman(messages)
-
+        
         if response is None:
             print("  ❌ Failed to generate chairman decision")
             return self._fallback_decision(pm_pitches)
-
+        
         # Parse and return chairman decision
         chairman_decision = self._parse_chairman_decision(response["content"])
-
+        
         return chairman_decision
-
+    
     def _build_chairman_prompt(
         self,
         pm_pitches: List[Dict[str, Any]],
         peer_reviews: List[Dict[str, Any]],
-        label_to_model: Dict[str, str],
+        label_to_model: Dict[str, str]
     ) -> str:
         """Build prompt for chairman synthesis."""
-
+        
         # Format PM pitches
-        pitches_text = "\n\n".join(
-            [
-                f"### {pitch.get('model_info', {}).get('account', 'Unknown')} ({pitch['model']})\n"
-                f"**Instrument:** {pitch['instrument']}\n"
-                f"**Direction:** {pitch['direction']}\n"
-                f"**Horizon:** {pitch['horizon']}\n"
-                f"**Conviction:** {pitch['conviction']}\n"
-                f"**Thesis:**\n"
-                + "\n".join(
-                    [f"  - {bullet}" for bullet in pitch.get("thesis_bullets", [])]
-                )
-                + f"\n**Risk Profile:** {pitch.get('risk_profile', 'BASE')}\n"
-                + f"**Exit Policy:** Stop Loss: {pitch.get('exit_policy', {}).get('stop_loss_pct', 0) * 100:.1f}%, Take Profit: {pitch.get('exit_policy', {}).get('take_profit_pct', 0) * 100:.1f}%, Time Stop: {pitch.get('exit_policy', {}).get('time_stop_days', 7)} days\n"
-                + f"**Entry Policy:** {pitch.get('entry_policy', {}).get('mode', 'MOO')}\n"
-                + f"**Risk Notes:** {pitch.get('risk_notes', 'N/A')}\n"
-                for pitch in pm_pitches
-            ]
-        )
+        pitches_text = "\n\n".join([
+            f"### {pitch.get('model_info', {}).get('account', 'Unknown')} ({pitch['model']})\n"
+            f"**Instrument:** {pitch['instrument']}\n"
+            f"**Direction:** {pitch['direction']}\n"
+            f"**Horizon:** {pitch['horizon']}\n"
+            f"**Conviction:** {pitch['conviction']}\n"
+            f"**Thesis:**\n"
+            + "\n".join([f"  - {bullet}" for bullet in pitch.get("thesis_bullets", [])])
+            + f"\n**Risk Profile:** {pitch.get('risk_profile', 'BASE')}\n"
+            + f"**Exit Policy:** Stop Loss: {pitch.get('exit_policy', {}).get('stop_loss_pct', 0) * 100:.1f}%, Take Profit: {pitch.get('exit_policy', {}).get('take_profit_pct', 0) * 100:.1f}%, Time Stop: {pitch.get('exit_policy', {}).get('time_stop_days', 7)} days\n"
+            + f"**Entry Policy:** {pitch.get('entry_policy', {}).get('mode', 'MOO')}\n"
+            + f"**Risk Notes:** {pitch.get('risk_notes', 'N/A')}\n"
+            for pitch in pm_pitches
+        ])
 
         # Format peer reviews
-        reviews_text = "\n\n".join(
-            [
-                f"### {review.get('reviewer_model', {}).get('account', 'Unknown')} Review of {review.get('pitch_label', 'Unknown')}\n"
-                f"**Average Score:** {review.get('average_score', 0)}/10\n"
-                f"**Scores:**\n"
-                + "\n".join(
-                    [
-                        f"  - {dim}: {review.get('scores', {}).get(dim, 'N/A')}/10"
-                        for dim in [
-                            "clarity",
-                            "edge_plausibility",
-                            "timing_catalyst",
-                            "risk_definition",
-                            "risk_management",
-                            "originality",
-                            "tradeability",
-                        ]
-                    ]
-                )
-                + f"\n**Best Argument Against:** {review.get('best_argument_against', 'N/A')}\n"
-                + f"**One Flip Condition:** {review.get('one_flip_condition', 'N/A')}\n"
-                + f"**Suggested Fix:** {review.get('suggested_fix', 'N/A')}\n"
-                for review in peer_reviews
-            ]
-        )
-
-        prompt = f"""You are the Chief Investment Officer (CIO) synthesizing recommendations from 5 portfolio managers.
-
-### PM PITCHES:
-
-{pitches_text}
-
-### PEER REVIEWS:
-
-{reviews_text}
-
-### TASK:
-
+        reviews_text = "\n\n".join([
+            f"### {review.get('reviewer_model', {}).get('account', 'Unknown')} Review of {review.get('pitch_label', 'Unknown')}\n"
+            f"**Average Score:** {review.get('average_score', 0)}/10\n"
+            f"**Scores:**\n"
+            + "\n".join([
+                f"  - {dim}: {review.get('scores', {}).get(dim, 'N/A')}/10"
+                for dim in ["clarity", "edge_plausibility", "timing_catalyst", "risk_definition", "risk_management", "originality", "tradeability"]
+            ])
+            + f"\n**Best Argument Against:** {review.get('best_argument_against', 'N/A')}\n"
+            + f"\n**One Flip Condition:** {review.get('one_flip_condition', 'N/A')}\n"
+            + f"\n**Suggested Fix:** {review.get('suggested_fix', 'N/A')}\n"
+            for review in peer_reviews
+        ])
 Generate a final council trade decision as valid JSON with the following structure:
 
 {{
@@ -229,10 +201,10 @@ Generate a final council trade decision as valid JSON with the following structu
 
 ### GUIDELINES:
 
- 1. SELECT TRADE:
-    - Pick ONE instrument from PM recommendations
-    - Choose direction (LONG/SHORT/FLAT) based on consensus
-    - Set horizon (1d or 3d or 1w) based on timing
+1. SELECT TRADE:
+   - Pick ONE instrument from the PM recommendations
+   - Choose direction (LONG/SHORT/FLAT) based on consensus
+   - Set horizon (1d/3d/1w) based on timing
    - Set conviction (-2 to +2) based on confidence
 
 2. RATIONALE:
@@ -246,10 +218,11 @@ Generate a final council trade decision as valid JSON with the following structu
    - Include their position and reason
    - Be fair to minority views
 
- 4. MONITORING PLAN:
-    - Checkpoints: 09:00, 12:00, 14:00, 15:50 ET
-    - Watch conditions: Stop loss hit, take profit hit, time stop reached, event-based exit
-    - Be specific about thresholds
+4. MONITORING PLAN:
+   - Checkpoints: 09:00, 12:00, 14:00, 15:50 ET
+   - Key indicators: RSI, MACD, VIX, etc.
+   - Watch conditions: When to exit or reduce
+   - Be specific about thresholds
 
 5. RISK MANAGEMENT:
    - Consider conviction level for position sizing
@@ -257,113 +230,107 @@ Generate a final council trade decision as valid JSON with the following structu
    - Account for market volatility
 
 Return as valid JSON only, no markdown formatting."""
-
+        
         return prompt
-
+    
     def _parse_chairman_decision(self, content: str) -> Dict[str, Any]:
         """
         Parse chairman decision from LLM response.
-
+        
         Args:
             content: LLM response content
-
+            
         Returns:
             Parsed chairman decision dict
         """
         import uuid
         from datetime import datetime
-
+        
         # Try to extract JSON from response
-        json_match = re.search(r"\{.*\}", content, re.DOTALL)
-
+        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+        
         if not json_match:
             print(f"  ⚠️  No JSON found in chairman response")
             return self._fallback_decision([])
-
+        
         json_str = json_match.group(0)
-
+        
         try:
             decision = json.loads(json_str)
-
+            
             # Validate required fields
             required_fields = [
-                "decision_id",
-                "week_id",
-                "selected_trade",
-                "conviction",
-                "rationale",
-                "monitoring_plan",
+                "decision_id", "week_id", "selected_trade", 
+                "conviction", "rationale", "monitoring_plan"
             ]
-
+            
             for field in required_fields:
                 if field not in decision:
                     print(f"  ⚠️  Missing field: {field}")
                     return self._fallback_decision([])
-
+            
             # Validate selected trade
             selected_trade = decision.get("selected_trade", {})
             if "instrument" not in selected_trade:
                 print(f"  ⚠️  Missing instrument in selected_trade")
                 return self._fallback_decision([])
-
+            
             if selected_trade["instrument"] not in self.INSTRUMENTS:
                 print(f"  ⚠️  Invalid instrument: {selected_trade['instrument']}")
                 return self._fallback_decision([])
-
+            
             if selected_trade.get("direction") not in ["LONG", "SHORT", "FLAT"]:
                 print(f"  ⚠️  Invalid direction: {selected_trade.get('direction')}")
                 return self._fallback_decision([])
-
+            
             if selected_trade.get("horizon") not in ["1d", "3d", "1w"]:
                 print(f"  ⚠️  Invalid horizon: {selected_trade.get('horizon')}")
                 return self._fallback_decision([])
-
+            
             conviction = decision.get("conviction", 0)
             if not isinstance(conviction, (int, float)):
                 print(f"  ⚠️  Invalid conviction type")
                 return self._fallback_decision([])
-
+            
             if conviction < self.CONVICTION_MIN or conviction > self.CONVICTION_MAX:
                 print(f"  ⚠️  Conviction out of range: {conviction}")
                 return self._fallback_decision([])
-
+            
             # Validate monitoring plan
             monitoring = decision.get("monitoring_plan", {})
             if not monitoring:
                 print(f"  ⚠️  Missing monitoring plan")
                 return self._fallback_decision([])
-
+            
             # Add metadata
             decision["model"] = "chairman"
             decision["model_id"] = REQUESTY_MODELS["chairman"]["model_id"]
             decision["account"] = REQUESTY_MODELS["chairman"]["account"]
             decision["alpaca_id"] = REQUESTY_MODELS["chairman"]["alpaca_id"]
             decision["timestamp"] = datetime.utcnow().isoformat()
-
+            
             return decision
-
+            
         except json.JSONDecodeError as e:
             print(f"  ⚠️  JSON decode error: {e}")
             return self._fallback_decision([])
-
+    
     def _fallback_decision(self, pm_pitches: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Generate fallback decision when LLM fails.
-
+        
         Args:
             pm_pitches: List of PM pitch dicts
-
+            
         Returns:
             Fallback chairman decision dict
         """
         import uuid
         from datetime import datetime
-
+        
         # Simple heuristic: pick highest conviction LONG/SHORT
-        valid_pitches = [
-            p for p in pm_pitches if p.get("direction") in ["LONG", "SHORT"]
-        ]
-
+        valid_pitches = [p for p in pm_pitches if p.get("direction") in ["LONG", "SHORT"]]
+        
         if not valid_pitches:
             # No valid pitches, return FLAT
             return {
@@ -372,38 +339,34 @@ Return as valid JSON only, no markdown formatting."""
                 "selected_trade": {
                     "instrument": "SPY",
                     "direction": "FLAT",
-                    "horizon": "1w",
+                    "horizon": "1w"
                 },
                 "conviction": 0,
                 "rationale": "No valid PM pitches available. Defaulting to FLAT.",
                 "dissent_summary": [],
                 "monitoring_plan": {
                     "checkpoints": ["09:00", "12:00", "14:00", "15:50"],
-                    "watch_conditions": [
-                        "Stop loss hit",
-                        "Take profit hit",
-                        "Time stop reached",
-                        "Event-based exit",
-                    ],
+                    "key_indicators": ["RSI", "MACD", "VIX"],
+                    "watch_conditions": ["Review PM pitches"]
                 },
                 "model": "chairman",
                 "model_id": REQUESTY_MODELS["chairman"]["model_id"],
                 "account": REQUESTY_MODELS["chairman"]["account"],
                 "alpaca_id": REQUESTY_MODELS["chairman"]["alpaca_id"],
                 "timestamp": datetime.utcnow().isoformat(),
-                "fallback": True,
+                "fallback": True
             }
-
+        
         # Pick pitch with highest conviction
         best_pitch = max(valid_pitches, key=lambda p: p.get("conviction", 0))
-
+        
         return {
             "decision_id": str(uuid.uuid4()),
             "week_id": datetime.utcnow().strftime("%Y-%m-%d"),
             "selected_trade": {
                 "instrument": best_pitch["instrument"],
                 "direction": best_pitch["direction"],
-                "horizon": best_pitch.get("horizon", "1w"),
+                "horizon": best_pitch.get("horizon", "1w")
             },
             "conviction": best_pitch.get("conviction", 0),
             "rationale": f"Selected {best_pitch.get('model_info', {}).get('account', 'Unknown')} pitch with highest conviction ({best_pitch.get('conviction', 0)}).",
@@ -411,23 +374,22 @@ Return as valid JSON only, no markdown formatting."""
                 {
                     "model": p.get("model_info", {}).get("account", "Unknown"),
                     "position": f"{p.get('direction', 'UNKNOWN')} on {p.get('instrument', 'Unknown')}",
-                    "reason": "Lower conviction or different view",
+                    "reason": "Lower conviction or different view"
                 }
-                for p in valid_pitches
-                if p != best_pitch
+                for p in valid_pitches if p != best_pitch
             ],
             "monitoring_plan": {
                 "checkpoints": ["09:00", "12:00", "14:00", "15:50"],
                 "key_indicators": ["RSI", "MACD", "VIX"],
                 "watch_conditions": [
                     f"Exit if conviction drops below 0.5",
-                    f"Review at each checkpoint",
-                ],
+                    f"Review at each checkpoint"
+                ]
             },
             "model": "chairman",
             "model_id": REQUESTY_MODELS["chairman"]["model_id"],
             "account": REQUESTY_MODELS["chairman"]["account"],
             "alpaca_id": REQUESTY_MODELS["chairman"]["alpaca_id"],
             "timestamp": datetime.utcnow().isoformat(),
-            "fallback": True,
+            "fallback": True
         }

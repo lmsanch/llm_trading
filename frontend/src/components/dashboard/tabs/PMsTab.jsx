@@ -15,6 +15,17 @@ const PM_MODELS = [
   { key: 'deepseek', label: 'DeepSeek V3', account: 'DEEPSEEK' }
 ];
 
+// Helper function to get logo path for PM models
+const getLogoPath = (modelKey) => {
+  const m = modelKey.toLowerCase();
+  if (m.includes('gpt') || m.includes('chatgpt')) return '/logos/openai.png';
+  if (m.includes('gemini')) return '/logos/google.png';
+  if (m.includes('claude')) return '/logos/anthropic.png';
+  if (m.includes('grok') || m.includes('groq')) return '/logos/xai.png';
+  if (m.includes('deepseek')) return '/logos/deepseek.png';
+  return null;
+};
+
 function ActivityIcon(props) {
   return (
     <svg
@@ -292,9 +303,32 @@ export default function PMsTab() {
         }
       });
 
-      // Sort by date descending
-      reports.sort((a, b) => new Date(b.date) - new Date(a.date));
-      setResearchReports(reports);
+      // Load created_at timestamps for each report
+      const reportsWithTimestamps = await Promise.all(
+        reports.map(async (report) => {
+          try {
+            const response = await fetch(`/api/research/report/${report.id}`);
+            if (response.ok) {
+              const reportData = await response.json();
+              return {
+                ...report,
+                created_at: reportData.created_at
+              };
+            }
+          } catch (error) {
+            console.error(`Error loading report ${report.id}:`, error);
+          }
+          return report;
+        })
+      );
+
+      // Sort by created_at or date descending
+      reportsWithTimestamps.sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at) : new Date(a.date);
+        const dateB = b.created_at ? new Date(b.created_at) : new Date(b.date);
+        return dateB - dateA;
+      });
+      setResearchReports(reportsWithTimestamps);
 
       // Auto-select and load the latest report
       if (reports.length > 0) {
@@ -602,11 +636,20 @@ export default function PMsTab() {
               className="w-full px-3 py-2 text-sm border rounded-md bg-background"
             >
               {researchReports.length === 0 && <option value="">No reports available</option>}
-              {researchReports.map(report => (
-                <option key={report.id} value={report.id}>
-                  {report.date} {report.id === researchReports[0].id ? '(Latest)' : ''}
-                </option>
-              ))}
+              {researchReports.map(report => {
+                const displayDate = report.created_at 
+                  ? new Date(report.created_at).toLocaleString('en-US', {
+                      timeZone: 'America/New_York',
+                      year: 'numeric', month: '2-digit', day: '2-digit',
+                      hour: '2-digit', minute: '2-digit', hour12: false
+                    }) + ' ET'
+                  : report.date;
+                return (
+                  <option key={report.id} value={report.id}>
+                    {displayDate} {report.id === researchReports[0]?.id ? '(Latest)' : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
           {/* Show Load Data button */}
@@ -681,24 +724,34 @@ export default function PMsTab() {
         return (
           <div key={model.key} className="space-y-3 flex flex-col h-full">
             <div className="flex-1">
-              <Card className="p-4 flex flex-col justify-between h-full bg-muted/10 border-dashed min-h-[300px]">
-                <div className="text-center space-y-3 mt-8">
-                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto">
-                    <ActivityIcon className="h-6 w-6 text-muted-foreground" />
+              <Card className="p-4 flex flex-col h-full bg-muted/10 border-dashed min-h-[300px]">
+                <div className="text-center space-y-3 flex-1 flex flex-col justify-center">
+                  <div className="w-12 h-12 rounded-lg bg-white/90 dark:bg-gray-800 flex items-center justify-center p-2 shadow-sm border mx-auto">
+                    {getLogoPath(model.key) ? (
+                      <img
+                        src={getLogoPath(model.key)}
+                        alt={model.label}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <ActivityIcon className="h-6 w-6 text-muted-foreground" />
+                    )}
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground">{model.label}</h3>
                     <p className="text-xs text-muted-foreground mt-1">{model.account}</p>
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground px-2">
-                      <span className="font-semibold">Instrument:</span> N/A
+                  <div className="p-3 bg-muted/30 rounded-md">
+                    <p className="text-sm text-muted-foreground">
+                      No PM report for research date:
                     </p>
-                    <p className="text-xs text-muted-foreground px-2">
-                      <span className="font-semibold">Direction:</span> N/A
-                    </p>
-                    <p className="text-xs text-muted-foreground px-2">
-                      <span className="font-semibold">Conviction:</span> N/A
+                    <p className="text-xs font-mono text-muted-foreground mt-1">
+                      {latestReport?.created_at ? 
+                        new Date(latestReport.created_at).toLocaleString('en-US', {
+                          timeZone: 'America/New_York',
+                          year: 'numeric', month: '2-digit', day: '2-digit',
+                          hour: '2-digit', minute: '2-digit', hour12: false
+                        }) + ' ET' : 'No research selected'}
                     </p>
                   </div>
                 </div>

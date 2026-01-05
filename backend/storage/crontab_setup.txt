@@ -1,0 +1,48 @@
+# ============================================================================
+# LLM Trading - Cron Job Setup Instructions
+# ============================================================================
+
+# To install these cron jobs, run:
+#   crontab -e
+# Then paste the following lines at the bottom of the file:
+
+# Daily market data update at 5:30 PM ET (after market close at 4:00 PM)
+# Runs Monday-Friday
+30 17 * * 1-5 cd /research/llm_trading && bash backend/storage/daily_update.sh >> /tmp/llm_trading_daily.log 2>&1
+
+# Alternative: If you want to run metrics calculation separately
+# 35 17 * * 1-5 cd /research/llm_trading && python backend/storage/calculate_metrics.py >> /tmp/llm_trading_metrics.log 2>&1
+
+# Optional: Weekly full refresh on Sunday at 2:00 AM (ensures data integrity)
+# 0 2 * * 0 cd /research/llm_trading && python backend/storage/fetch_market_data.py seed --days 180 >> /tmp/llm_trading_seed.log 2>&1
+
+# ============================================================================
+# Checking Cron Logs
+# ============================================================================
+
+# To view daily update logs:
+#   tail -f /tmp/llm_trading_daily.log
+
+# To view metrics calculation logs:
+#   tail -f /tmp/llm_trading_metrics.log
+
+# ============================================================================
+# Testing Cron Jobs
+# ============================================================================
+
+# Test daily update manually:
+#   bash backend/storage/daily_update.sh
+
+# Test metrics calculation manually:
+#   python backend/storage/calculate_metrics.py
+
+# ============================================================================
+# Timezone Notes
+# ============================================================================
+
+# ET (Eastern Time) = UTC-5 (EST) or UTC-4 (EDT)
+# Market closes at 4:00 PM ET, so we run at 5:30 PM ET to ensure data is available
+#
+# If your server is in a different timezone, adjust the cron times accordingly:
+# - UTC: Use 21:30 (5:30 PM ET = 21:30 UTC during EST, 22:30 UTC during EDT)
+# - PST: Use 14:30 (5:30 PM ET = 2:30 PM PST)

@@ -1,0 +1,38 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://sgxanalytics.ai/schemas/graph_digest.schema.json",
+    "title": "Graph Digest for LLM Consumption",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "week_id",
+        "asof_et",
+        "top_edges",
+        "asset_subgraphs",
+        "notes"
+    ],
+    "properties": {
+        "week_id": {
+            "type": "string"
+        },
+        "asof_et": {
+            "type": "string"
+        },
+        "top_edges": {
+            "type": "array",
+            "items": {
+                "type": "object"
+            }
+        },
+        "asset_subgraphs": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "notes": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        }
+    }
+}

@@ -140,10 +140,10 @@ class AlpacaMarketDataFetcher:
         self.client = StockHistoricalDataClient(ALPACA_API_KEY, ALPACA_SECRET_KEY)
         print(f"✅ Initialized Alpaca data client")
 
-    def seed_initial_data(self, days: int = 30):
+    def seed_initial_data(self, days: int = 180):
         """
         Seed database with initial historical data.
-        
+
         Args:
             days: Number of days of historical data to fetch
         """
@@ -281,8 +281,13 @@ def main():
     parser.add_argument(
         "--days",
         type=int,
-        default=30,
-        help="Days to seed (default: 30)"
+        default=180,
+        help="Days to seed (default: 180)"
+    )
+    parser.add_argument(
+        "--skip-metrics",
+        action="store_true",
+        help="Skip automatic metrics calculation after fetching data"
     )
 
     args = parser.parse_args()
@@ -296,6 +301,17 @@ def main():
     elif args.command == "hourly":
         print("⚠️  Hourly snapshots not yet implemented")
         # TODO: Implement hourly snapshots if needed
+
+    # Automatically calculate metrics after fetching data
+    if not args.skip_metrics and args.command in ["seed", "daily"]:
+        print("\n🔄 Running metrics calculation...")
+        try:
+            from calculate_metrics import MetricsCalculator
+            calculator = MetricsCalculator()
+            calculator.run_all_calculations()
+        except Exception as e:
+            print(f"⚠️  Warning: Metrics calculation failed: {e}")
+            print("   You can run it manually with: python backend/storage/calculate_metrics.py")
 
 
 if __name__ == "__main__":
