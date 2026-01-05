@@ -1232,7 +1232,9 @@ async def generate_pitches(
             # Filter output to only requested models (safety check) and merge
             new_pitches = [p for p in new_pitches if p["model"] in models_to_run]
             
-            # Merge with existing pitches
+            # Merge with existing pitches (handle None case)
+            if pipeline_state.pm_pitches is None:
+                pipeline_state.pm_pitches = []
             existing_pitches = [p for p in pipeline_state.pm_pitches if p["model"] not in models_to_run]
             pipeline_state.pm_pitches = existing_pitches + new_pitches
 
@@ -1242,6 +1244,9 @@ async def generate_pitches(
             all_raw = result_context.get(PM_PITCHES, [])
             new_raw = [p for p in all_raw if p.get("model") in models_to_run]
             
+            # Handle None case for raw pitches
+            if pipeline_state.pm_pitches_raw is None:
+                pipeline_state.pm_pitches_raw = []
             existing_raw = [p for p in pipeline_state.pm_pitches_raw if p.get("model") not in models_to_run]
             pipeline_state.pm_pitches_raw = existing_raw + new_raw
 
