@@ -9,6 +9,7 @@ import uuid
 import json
 import asyncio
 from datetime import datetime
+import time
 import os
 from pathlib import Path
 
@@ -45,6 +46,18 @@ from .pipeline.stages.execution import ExecutionStage, EXECUTION_RESULT
 from .multi_alpaca_client import MultiAlpacaManager
 
 app = FastAPI(title="LLM Council API")
+
+#region agent log
+def _agent_log(payload: Dict[str, Any]) -> None:
+    """Append NDJSON debug log for backend instrumentation."""
+    try:
+        payload.setdefault("timestamp", int(time.time() * 1000))
+        payload.setdefault("sessionId", "debug-session")
+        with open("/research/llm_trading/.cursor/debug.log", "a") as f:
+            f.write(json.dumps(payload) + "\n")
+    except Exception:
+        pass
+#endregion
 
 # Enable CORS for local development and Tailscale VPN
 from backend.config import get_cors_origins
@@ -945,6 +958,20 @@ def _save_pitches_to_db(week_id: str, pitches_raw: List[Dict[str, Any]], researc
             with conn.cursor() as cur:
                 print(f"💾 Saving {len(pitches_raw)} pitches to DB for week {week_id}")
                 
+                #region agent log
+                _agent_log({
+                    "runId": "post-fix",
+                    "hypothesisId": "H3",
+                    "location": "main:_save_pitches_to_db:start",
+                    "message": "Saving pitches to DB",
+                    "data": {
+                        "week_id": week_id,
+                        "research_date": research_date,
+                        "count": len(pitches_raw)
+                    }
+                })
+                #endregion
+                
                 for pitch in pitches_raw:
                     model = pitch.get("model", "unknown")
                     account = pitch.get("model_info", {}).get("account", "UNKNOWN")
@@ -988,6 +1015,19 @@ def _save_pitches_to_db(week_id: str, pitches_raw: List[Dict[str, Any]], researc
                 
                 conn.commit()
                 print("✅ Pitches saved to DB")
+                #region agent log
+                _agent_log({
+                    "runId": "post-fix",
+                    "hypothesisId": "H3",
+                    "location": "main:_save_pitches_to_db:commit",
+                    "message": "Committed pitches to DB",
+                    "data": {
+                        "week_id": week_id,
+                        "research_date": research_date,
+                        "count": len(pitches_raw)
+                    }
+                })
+                #endregion
 
         finally:
             conn.close()
@@ -1106,6 +1146,11 @@ async def generate_pitches(
     background_tasks: BackgroundTasks, request: GeneratePitchesRequest
 ):
     """Generate PM pitches from a specific research report."""
+    print(f"\n{'='*60}")
+    print(f"🎯 PM PITCH GENERATION REQUEST RECEIVED")
+    print(f"   Research ID: {request.research_id}")
+    print(f"   Model: {request.model if request.model else 'ALL'}")
+    print(f"{'='*60}\n")
     job_id = str(uuid.uuid4())
 
     # Determine target models
@@ -1133,11 +1178,22 @@ async def generate_pitches(
 
     pipeline_state.jobs[job_id] = job_status
 
-    async def run_pitches(jid, research_id, models_to_run):
+    # Track if this is a single-model request
+    is_single_model = request.model is not None and len(target_models) == 1
+
+    async def run_pitches(jid, research_id, models_to_run, is_single):
         import psycopg2
 
         try:
-            pipeline_state.pm_status = "generating"
+            print(f"\n🚀 Starting pitch generation for job {jid}")
+            print(f"   Models: {models_to_run}")
+            print(f"   Research ID: {research_id}")
+            print(f"   Single model: {is_single}\n")
+            
+            # Only set global status if generating all models
+            # Single model requests should not block others
+            if not is_single:
+                pipeline_state.pm_status = "generating"
 
             # Load research report from database
             db_name = os.getenv("DATABASE_NAME", "llm_trading")
@@ -1269,7 +1325,9 @@ async def generate_pitches(
             # Update job status
             pipeline_state.jobs[jid]["status"] = "complete"
             pipeline_state.jobs[jid]["results"] = {"pitches": pipeline_state.pm_pitches}
-            pipeline_state.pm_status = "complete"
+            # Only update global status if this was a multi-model job
+            if not is_single:
+                pipeline_state.pm_status = "complete"
 
         except Exception as e:
             print(f"Error generating pitches: {e}")
@@ -1284,9 +1342,12 @@ async def generate_pitches(
 
             pipeline_state.jobs[jid]["status"] = "error"
             pipeline_state.jobs[jid]["error"] = str(e)
-            pipeline_state.pm_status = "error"
+            # Only update global status if this was a multi-model job
+            if not is_single:
+                pipeline_state.pm_status = "error"
 
-    background_tasks.add_task(run_pitches, job_id, request.research_id, target_models)
+    print(f"✅ Job {job_id} queued for background processing")
+    background_tasks.add_task(run_pitches, job_id, request.research_id, target_models, is_single_model)
     return {
         "status": "generating",
         "job_id": job_id,

@@ -2,6 +2,8 @@
 
 import json
 import re
+import time
+import uuid
 from typing import Dict, Any, List
 from datetime import datetime
 
@@ -11,6 +13,18 @@ from ..context import PipelineContext, ContextKey
 from ..base import Stage
 from .research import get_week_id, RESEARCH_PACK_A, RESEARCH_PACK_B
 from ..graph_digest import make_digest
+
+#region agent log
+def _agent_log(payload: Dict[str, Any]) -> None:
+    """Append small NDJSON log for debug session."""
+    try:
+        payload.setdefault("timestamp", int(time.time() * 1000))
+        payload.setdefault("sessionId", "debug-session")
+        with open("/research/llm_trading/.cursor/debug.log", "a") as f:
+            f.write(json.dumps(payload) + "\n")
+    except Exception:
+        pass
+#endregion
 
 
 # Context keys for PM pitches
@@ -30,18 +44,26 @@ RISK_PROFILES = {
     "WIDE":  {"stop_loss_pct": 0.020, "take_profit_pct": 0.035}
 }
 
-# Valid entry modes
+# Valid entry modes (NONE is only for FLAT, validated separately)
 ENTRY_MODES = ["MOO", "limit"]
 
 # Valid event triggers for early exit
 EXIT_EVENTS = ["NFP", "CPI", "FOMC"]
 
 # Banned indicator keywords (case-insensitive)
+# Banned indicator keywords (case-insensitive)
 BANNED_KEYWORDS = [
     "rsi", "macd", "moving average", "moving-average",
     "ema", "sma", "bollinger", "stochastic",
     "fibonacci", "ichimoku", "adx", "atr"
 ]
+
+
+class IndicatorError(Exception):
+    """Raised when a pitch contains banned technical indicators."""
+    def __init__(self, keyword: str):
+        super().__init__(f"Indicator banned: {keyword}")
+        self.keyword = keyword
 
 
 class PMPitchStage(Stage):
@@ -148,17 +170,20 @@ class PMPitchStage(Stage):
         messages = [
             {
                 "role": "system",
-                "content": """You are an expert portfolio manager for a quantitative trading system. Your task is to generate a single, well-reasoned trading recommendation based on research analysis.
+                "content": """You are a macro/fundamental portfolio manager for a quantitative trading system.
+
+You MUST produce a 1-week trade pitch using ONLY macro regime, policy, economic data, fundamentals, and cross-asset narratives.
+DO NOT use or mention technical analysis, charts, indicators, levels, patterns, "support/resistance", or any TA terminology — even to deny it.
+If you cannot comply, output FLAT with conviction 0.
 
 Rules:
 1. Pick ONE instrument from the tradable universe
 2. Choose direction: LONG, SHORT, or FLAT
 3. Set horizon to "1W" exactly
-4. Provide 3-5 thesis bullets (max 5)
-5. Include frozen indicators with thresholds
-6. Set conviction score from -2 to +2
-7. Define clear invalidation rule
-8. Be specific and actionable
+4. Provide 3-5 thesis bullets (max 5) - each MUST start with one prefix: "Rates:", "USD:", "Inflation:", "Growth:", "Policy:", "Cross-asset:", "Catalyst:", "Positioning:", or "Risk:"
+5. Set conviction score from -2 to +2
+6. Define clear risk notes (macro/fundamental only)
+7. Be specific and actionable
 
 CRITICAL: Return ONLY valid JSON. No markdown, no code blocks, no comments. 
 - Do NOT use trailing commas
@@ -180,8 +205,136 @@ Return as valid JSON only."""
         # Parse and validate pitches
         pm_pitches = []
         for model_key, response in responses.items():
+            #region agent log
+            _agent_log({
+                "runId": "post-fix",
+                "hypothesisId": "H1",
+                "location": "pm_pitch:_generate_pm_pitches",
+                "message": "Model response received",
+                "data": {
+                    "model": model_key,
+                    "has_response": response is not None,
+                    "content_len": len(response.get("content", "")) if response else 0
+                }
+            })
+            #endregion
             if response is not None:
-                pitch = self._parse_pm_pitch(response["content"], model_key)
+                pitch = None
+                try:
+                    pitch = self._parse_pm_pitch(response["content"], model_key)
+                except IndicatorError as ie:
+                    #region agent log
+                    _agent_log({
+                        "runId": "post-fix",
+                        "hypothesisId": "H2",
+                        "location": "pm_pitch:_generate_pm_pitches:retry",
+                        "message": "Retrying model due to indicator ban",
+                        "data": {"model": model_key, "keyword": ie.keyword}
+                    })
+                    #endregion
+                    # Retry once with a corrective prompt
+                    retry_messages = [
+                        {
+                            "role": "system",
+                            "content": """Your previous pitch was REJECTED for mentioning technical indicators.
+You MUST output a FLAT trade with conviction 0 and macro-only thesis bullets.
+Return EXACTLY this JSON structure (replace week_id and asof_et with current values):
+{
+  "idea_id": "uuid",
+  "week_id": "YYYY-MM-DD",
+  "asof_et": "ISO8601-ET",
+  "pm_model": "your_model_name",
+  "selected_instrument": "FLAT",
+  "direction": "FLAT",
+  "horizon": "1W",
+  "conviction": 0,
+  "risk_profile": "BASE",
+  "thesis_bullets": [
+    "Policy: Insufficient macro clarity for directional trade",
+    "Risk: Market conditions require neutral stance"
+  ],
+  "entry_policy": {"mode": "MOO", "limit_price": null},
+  "exit_policy": {"time_stop_days": 7, "stop_loss_pct": 0.015, "take_profit_pct": 0.025, "exit_before_events": []},
+  "consensus_map": {"research_pack_a": "neutral", "research_pack_b": "neutral"},
+  "risk_notes": "Macro uncertainty requires neutral positioning",
+  "compliance_check": {"macro_only": true, "no_ta_language": true},
+  "timestamp": "ISO8601"
+}
+Return ONLY this JSON, no other text."""
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                    retry_resp = await query_pm_models(retry_messages, model_keys=[model_key])
+                    retry_content = retry_resp.get(model_key, {}).get("content") if retry_resp else None
+                    if retry_content:
+                        try:
+                            pitch = self._parse_pm_pitch(retry_content, model_key)
+                        except IndicatorError as ie2:
+                            #region agent log
+                            _agent_log({
+                                "runId": "post-fix",
+                                "hypothesisId": "H2",
+                                "location": "pm_pitch:_generate_pm_pitches:retry_failed",
+                                "message": "Retry still contains indicators, generating FLAT fallback",
+                                "data": {"model": model_key, "keyword": ie2.keyword}
+                            })
+                            #endregion
+                            # Generate FLAT fallback pitch
+                            week_id = get_week_id()
+                            from datetime import datetime, timezone, timedelta
+                            et_tz = timezone(timedelta(hours=-5))
+                            asof_et = datetime.now(et_tz).isoformat()
+                            pitch = {
+                                "idea_id": str(uuid.uuid4()),
+                                "week_id": week_id,
+                                "asof_et": asof_et,
+                                "pm_model": model_key,
+                                "selected_instrument": "FLAT",
+                                "direction": "FLAT",
+                                "horizon": "1W",
+                                "conviction": 0,
+                                "risk_profile": None,  # FLAT trades don't need risk profiles
+                                "thesis_bullets": [
+                                    "Policy: Insufficient macro clarity for directional trade",
+                                    "Risk: Market conditions require neutral stance"
+                                ],
+                                "entry_policy": {"mode": "NONE", "limit_price": None},  # FLAT uses NONE, not MOO
+                                "exit_policy": None,  # FLAT trades don't need exit policies
+                                "consensus_map": {"research_pack_a": "neutral", "research_pack_b": "neutral"},
+                                "risk_notes": "Macro uncertainty requires neutral positioning",
+                                "compliance_check": {"macro_only": True, "no_ta_language": True},
+                                "timestamp": datetime.utcnow().isoformat(),
+                                "model": model_key,
+                                "model_info": REQUESTY_MODELS[model_key]
+                            }
+                        except Exception as e2:
+                            #region agent log
+                            _agent_log({
+                                "runId": "post-fix",
+                                "hypothesisId": "H2",
+                                "location": "pm_pitch:_generate_pm_pitches:retry_parse_error",
+                                "message": "Retry parse failed",
+                                "data": {"model": model_key, "error": str(e2)}
+                            })
+                            #endregion
+                            pitch = None
+                    else:
+                        pitch = None
+                except Exception as e:
+                    #region agent log
+                    _agent_log({
+                        "runId": "post-fix",
+                        "hypothesisId": "H2",
+                        "location": "pm_pitch:_generate_pm_pitches:parse_error",
+                        "message": "Parse failed",
+                        "data": {"model": model_key, "error": str(e)}
+                    })
+                    #endregion
+                    pitch = None
+
                 if pitch:
                     pm_pitches.append(pitch)
                     model_info = REQUESTY_MODELS[model_key]
@@ -233,7 +386,11 @@ Return as valid JSON only."""
             except Exception as e:
                 print(f"  ⚠️ Failed to generate graph digest: {e}")
         
-        prompt = f"""You are a portfolio manager for a quantitative trading system. Generate a trading recommendation for week {week_id}.
+        prompt = f"""Generate a trading recommendation for week {week_id}.
+
+THIS IS A MACRO/FUNDAMENTAL-ONLY TRADING SYSTEM.
+Base your thesis ONLY on macro regime, policy, economic data, fundamentals, and cross-asset narratives.
+Do not use or mention technical analysis, charts, indicators, or TA terminology.
 
 RESEARCH PACK (Perplexity Sonar Deep Research):
 {research_text_a}
@@ -258,6 +415,11 @@ TRADABLE UNIVERSE:
 
 TASK: Generate a single trading recommendation as valid JSON with the following structure:
 
+Thesis bullet rules:
+- 3-5 bullets max
+- Each bullet MUST start with one prefix: "Rates:", "USD:", "Inflation:", "Growth:", "Policy:", "Cross-asset:", "Catalyst:", "Positioning:", or "Risk:"
+- Do not reference charts/technicals in any way
+
 {{
   "idea_id": "uuid",
   "week_id": "{week_id}",
@@ -269,9 +431,9 @@ TASK: Generate a single trading recommendation as valid JSON with the following 
   "conviction": 1.5,
   "risk_profile": "BASE",
   "thesis_bullets": [
-    "First reason...",
-    "Second reason...",
-    "Third reason..."
+    "Rates: Fed policy stance supports risk assets",
+    "USD: Dollar weakness benefits exporters",
+    "Policy: Fiscal stimulus expectations"
   ],
   "entry_policy": {{
     "mode": "MOO",
@@ -283,34 +445,67 @@ TASK: Generate a single trading recommendation as valid JSON with the following 
     "take_profit_pct": 0.025,
     "exit_before_events": ["NFP"]
   }},
+  "risk_notes": "Key risks to monitor...",
+  "timestamp": "ISO8601"
+}}
+
+For FLAT trades, use this structure instead:
+{{
+  "idea_id": "uuid",
+  "week_id": "{week_id}",
+  "asof_et": "2026-01-02T16:00:00-05:00",
+  "pm_model": "your_model_name",
+  "selected_instrument": "FLAT",
+  "direction": "FLAT",
+  "horizon": "1W",
+  "conviction": 0,
+  "risk_profile": null,
+  "thesis_bullets": [
+    "Policy: Insufficient macro clarity for directional trade",
+    "Risk: Market conditions require neutral stance"
+  ],
+  "entry_policy": {{
+    "mode": "NONE",
+    "limit_price": null
+  }},
+  "exit_policy": null,
   "consensus_map": {{
     "research_pack_a": "agree",
     "research_pack_b": "agree"
   }},
   "risk_notes": "Key risks to monitor...",
+  "compliance_check": {{
+    "macro_only": true,
+    "no_ta_language": true
+  }},
   "timestamp": "ISO8601"
 }}
 
 IMPORTANT RULES:
+
+REQUIRED FIELDS:
 - Use "pm_model" field with your model name
 - Use "selected_instrument" for the ticker (one of the 10 instruments above)
 - Set "horizon" to "1W" exactly (only 1W is supported in v1)
 - Include "asof_et" with current timestamp in ET timezone (ISO8601 format with -05:00 offset)
-- Set "risk_profile" to one of: TIGHT | BASE | WIDE
-  * TIGHT: 1.0% stop / 1.5% take-profit (tight risk for choppy markets)
-  * BASE:  1.5% stop / 2.5% take-profit (balanced risk for normal conditions)
-  * WIDE:  2.0% stop / 3.5% take-profit (wide risk for trending markets)
+- For LONG or SHORT trades:
+  * Set "risk_profile" to one of: TIGHT | BASE | WIDE
+    - TIGHT: 1.0% stop / 1.5% take-profit (tight risk for choppy markets)
+    - BASE:  1.5% stop / 2.5% take-profit (balanced risk for normal conditions)
+    - WIDE:  2.0% stop / 3.5% take-profit (wide risk for trending markets)
+  * Define "exit_policy":
+    - time_stop_days: Always 7 (close position after 7 days)
+    - stop_loss_pct: Must match risk_profile (0.010 | 0.015 | 0.020)
+    - take_profit_pct: Must match risk_profile (0.015 | 0.025 | 0.035)
+    - exit_before_events: Optional array ["NFP", "CPI", "FOMC"]
+- For FLAT trades:
+  * Set "risk_profile": null (or omit it)
+  * Set "exit_policy": null (or omit it)
+  * Set "entry_policy": {{"mode": "NONE", "limit_price": null}}
+  * Do NOT include stop_loss_pct, take_profit_pct, or time_stop_days
 - Define "entry_policy":
   * mode: "MOO" (market-on-open) or "limit"
   * limit_price: Required if mode is "limit", otherwise null
-- Define "exit_policy":
-  * time_stop_days: Always 7 (close position after 7 days)
-  * stop_loss_pct: Must match risk_profile (0.010 | 0.015 | 0.020)
-  * take_profit_pct: Must match risk_profile (0.015 | 0.025 | 0.035)
-  * exit_before_events: Optional array ["NFP", "CPI", "FOMC"]
-- **FORBIDDEN**: Do NOT use technical indicators (RSI, MACD, moving averages, Bollinger bands, Stochastic, Fibonacci, ADX, ATR, etc.)
-  * Base your thesis on macro regime, narratives, fundamental catalysts only
-  * If you mention any indicator, your pitch will be REJECTED and regenerated
 - Use "risk_notes" (not "invalidation_rule") to describe primary risks for the week
 - Direction options: LONG | SHORT | FLAT
 - Conviction range: -2 to +2 (negative for SHORT, positive for LONG, 0 for FLAT)
@@ -318,10 +513,10 @@ IMPORTANT RULES:
 - Consider both research packs
 
 VALIDATION RULES:
-- Your pitch will be REJECTED if it contains: RSI, MACD, EMA, SMA, Bollinger, Stochastic, Fibonacci, or any chart pattern references
 - Risk profile must exactly match one of the three standardized profiles (TIGHT/BASE/WIDE)
 - All percentages in exit_policy must match the chosen risk_profile
 - Do NOT include position sizing hints - sizing is handled separately
+- compliance_check field is optional but recommended
 
 JSON FORMATTING REQUIREMENTS:
 - NO trailing commas (e.g., do not write {{"a": 1,}})
@@ -537,31 +732,27 @@ Return as valid JSON only, no markdown formatting."""
         
         return "\n".join(lines)
     
+    def _recursive_scan_strings(self, obj: Any, text_collector: List[str]) -> None:
+        """Recursively scan all string fields in a nested structure."""
+        if isinstance(obj, str):
+            text_collector.append(obj.lower())
+        elif isinstance(obj, dict):
+            for value in obj.values():
+                self._recursive_scan_strings(value, text_collector)
+        elif isinstance(obj, list):
+            for item in obj:
+                self._recursive_scan_strings(item, text_collector)
+    
     def _validate_no_indicators(self, pitch: Dict[str, Any]) -> None:
-        """Reject pitches that mention technical indicators."""
-        # Check all string fields
-        fields_to_check = [
-            "thesis_bullets",  # list of strings
-            "risk_notes",      # string
-        ]
-        
+        """Reject pitches that mention technical indicators. Scans all string fields recursively."""
         text_to_scan = []
-        
-        for field in fields_to_check:
-            value = pitch.get(field)
-            if isinstance(value, str):
-                text_to_scan.append(value.lower())
-            elif isinstance(value, list):
-                text_to_scan.extend([str(v).lower() for v in value])
+        self._recursive_scan_strings(pitch, text_to_scan)
         
         combined_text = " ".join(text_to_scan)
         
         for keyword in BANNED_KEYWORDS:
             if keyword in combined_text:
-                raise ValueError(
-                    f"❌ REJECTED: Pitch contains banned indicator keyword '{keyword}'. "
-                    f"Use macro/fundamental reasoning only."
-                )
+                raise IndicatorError(keyword)
     
     def _parse_pm_pitch(
         self,
@@ -578,10 +769,34 @@ Return as valid JSON only, no markdown formatting."""
         Returns:
             Parsed pitch dict or None if invalid
         """
+        #region agent log
+        _agent_log({
+                "runId": "post-fix",
+            "hypothesisId": "H2",
+            "location": "pm_pitch:_parse_pm_pitch:entry",
+            "message": "Parsing pitch",
+            "data": {
+                "model": model_key,
+                "content_len": len(content or "")
+            }
+        })
+        #endregion
         # Try to extract JSON from response
         json_match = re.search(r'\{.*\}', content, re.DOTALL)
         
         if not json_match:
+            #region agent log
+            _agent_log({
+                "runId": "post-fix",
+                "hypothesisId": "H2",
+                "location": "pm_pitch:_parse_pm_pitch:no_json",
+                "message": "No JSON found in response",
+                "data": {
+                    "model": model_key,
+                    "preview": (content or "")[:160]
+                }
+            })
+            #endregion
             print(f"  ⚠️  No JSON found in response from {model_key}")
             print(f"  📄 Raw content preview: {content[:200]}...")
             return None
@@ -619,50 +834,114 @@ Return as valid JSON only, no markdown formatting."""
         # Validate no technical indicators
         try:
             self._validate_no_indicators(pitch)
-        except ValueError as e:
+        except IndicatorError as e:
+            #region agent log
+            _agent_log({
+                "runId": "post-fix",
+                "hypothesisId": "H2",
+                "location": "pm_pitch:_parse_pm_pitch:indicator_ban",
+                "message": "Banned indicator detected",
+                "data": {
+                    "model": model_key,
+                    "error": str(e),
+                    "keyword": e.keyword
+                }
+            })
+            #endregion
             print(f"  {str(e)}")
-            return None
+            raise
             
+        # Validate direction first (needed for FLAT checks)
+        direction = pitch.get("direction")
+        if direction not in ["LONG", "SHORT", "FLAT"]:
+            print(f"  ⚠️  Invalid direction: {direction}")
+            return None
+        
         # Validate required fields (v2 schema)
         required_fields = [
             "week_id", "asof_et", "pm_model", "selected_instrument",
             "direction", "conviction", "horizon", "thesis_bullets",
-            "risk_profile", "entry_policy", "exit_policy", "risk_notes"  # NEW
+            "entry_policy", "risk_notes"
         ]
+        
+        # For LONG/SHORT, risk_profile and exit_policy are required
+        # For FLAT, they are optional
+        if direction != "FLAT":
+            required_fields.extend(["risk_profile", "exit_policy"])
         
         missing_fields = [f for f in required_fields if f not in pitch]
         if missing_fields:
+            #region agent log
+            _agent_log({
+                "runId": "post-fix",
+                "hypothesisId": "H2",
+                "location": "pm_pitch:_parse_pm_pitch:missing_fields",
+                "message": "Pitch missing required fields",
+                "data": {
+                    "model": model_key,
+                    "missing": missing_fields,
+                    "present": list(pitch.keys())
+                }
+            })
+            #endregion
             print(f"  ⚠️  Missing required fields: {', '.join(missing_fields)}")
             print(f"  ℹ️  Fields present: {', '.join(pitch.keys())}")
             return None
-        
-        # Validate risk_profile
-        if pitch.get("risk_profile") not in ["TIGHT", "BASE", "WIDE"]:
-            raise ValueError(f"Invalid risk_profile: {pitch.get('risk_profile')}")
         
         # Validate entry_policy structure
         entry_policy = pitch.get("entry_policy", {})
         if "mode" not in entry_policy:
             raise ValueError("entry_policy missing required field: mode")
-        if entry_policy["mode"] not in ENTRY_MODES:
-            raise ValueError(f"Invalid entry_policy.mode: {entry_policy['mode']}")
+        # For FLAT, mode must be "NONE", for LONG/SHORT it must be in ENTRY_MODES
+        if direction == "FLAT":
+            if entry_policy["mode"] not in ["NONE", None]:
+                raise ValueError(f"FLAT trades must have entry_policy.mode='NONE' (got: {entry_policy['mode']})")
+        else:
+            if entry_policy["mode"] not in ENTRY_MODES:
+                raise ValueError(f"Invalid entry_policy.mode: {entry_policy['mode']}")
         
-        # Validate exit_policy structure
-        exit_policy = pitch.get("exit_policy", {})
-        required_exit_fields = ["time_stop_days", "stop_loss_pct"]
-        for field in required_exit_fields:
-            if field not in exit_policy:
-                raise ValueError(f"exit_policy missing required field: {field}")
-        
-        # Validate risk profile consistency
-        risk_profile = pitch["risk_profile"]
-        expected_stops = RISK_PROFILES[risk_profile]
-        actual_stop = exit_policy.get("stop_loss_pct")
-        if abs(actual_stop - expected_stops["stop_loss_pct"]) > 0.0001:
-            raise ValueError(
-                f"exit_policy.stop_loss_pct ({actual_stop}) does not match "
-                f"risk_profile {risk_profile} ({expected_stops['stop_loss_pct']})"
-            )
+        # For FLAT trades, REJECT if they have risk profiles or exit policies
+        if direction == "FLAT":
+            # FLAT trades must NOT have risk profiles or exit policies
+            if pitch.get("risk_profile") not in [None, "NONE"]:
+                raise ValueError(f"FLAT trades must not have risk_profile (got: {pitch.get('risk_profile')})")
+            if pitch.get("exit_policy") not in [None, {}]:
+                exit_policy = pitch.get("exit_policy", {})
+                if exit_policy and (exit_policy.get("stop_loss_pct") or exit_policy.get("take_profit_pct") or exit_policy.get("time_stop_days")):
+                    raise ValueError(f"FLAT trades must not have exit_policy with stop_loss/take_profit/time_stop")
+            # FLAT entry_policy should be NONE or omitted
+            if entry_policy.get("mode") not in ["NONE", None]:
+                raise ValueError(f"FLAT trades must have entry_policy.mode='NONE' (got: {entry_policy.get('mode')})")
+        else:
+            # For LONG/SHORT, risk_profile and exit_policy are required
+            if pitch.get("risk_profile") not in ["TIGHT", "BASE", "WIDE"]:
+                raise ValueError(f"Invalid risk_profile: {pitch.get('risk_profile')}")
+            
+            # Validate exit_policy structure
+            exit_policy = pitch.get("exit_policy", {})
+            required_exit_fields = ["time_stop_days", "stop_loss_pct"]
+            for field in required_exit_fields:
+                if field not in exit_policy:
+                    raise ValueError(f"exit_policy missing required field: {field}")
+            
+            # Validate risk profile consistency
+            risk_profile = pitch["risk_profile"]
+            expected_stops = RISK_PROFILES[risk_profile]
+            actual_stop = exit_policy.get("stop_loss_pct")
+            if abs(actual_stop - expected_stops["stop_loss_pct"]) > 0.0001:
+                raise ValueError(
+                    f"exit_policy.stop_loss_pct ({actual_stop}) does not match "
+                    f"risk_profile {risk_profile} ({expected_stops['stop_loss_pct']})"
+                )
+            # Validate take_profit_pct matches risk_profile
+            actual_tp = exit_policy.get("take_profit_pct")
+            if actual_tp is not None:
+                expected_tp = expected_stops["take_profit_pct"]
+                if abs(actual_tp - expected_tp) > 0.0001:
+                    raise ValueError(
+                        f"exit_policy.take_profit_pct ({actual_tp}) does not match "
+                        f"risk_profile {risk_profile} ({expected_tp})"
+                    )
         
         # Validate selected_instrument (allow FLAT)
         valid_instruments = self.INSTRUMENTS + ["FLAT"]
@@ -670,10 +949,7 @@ Return as valid JSON only, no markdown formatting."""
             print(f"  ⚠️  Invalid selected_instrument: {pitch['selected_instrument']}")
             return None
         
-        # Validate direction
-        if pitch["direction"] not in ["LONG", "SHORT", "FLAT"]:
-            print(f"  ⚠️  Invalid direction: {pitch['direction']}")
-            return None
+        # Direction already validated above
         
         # Validate horizon (v1 only supports 1W)
         if pitch["horizon"] != "1W":
@@ -708,6 +984,18 @@ Return as valid JSON only, no markdown formatting."""
         pitch["model_info"] = REQUESTY_MODELS[model_key]
         pitch["timestamp"] = datetime.utcnow().isoformat()
         
+        #region agent log
+        _agent_log({
+            "runId": "post-fix",
+            "hypothesisId": "H2",
+            "location": "pm_pitch:_parse_pm_pitch:success",
+            "message": "Pitch parsed successfully",
+            "data": {
+                "model": model_key,
+                "fields": list(pitch.keys())
+            }
+        })
+        #endregion
         return pitch
     
     def _placeholder_research_pack(self) -> Dict[str, Any]:
@@ -738,18 +1026,16 @@ Return as valid JSON only, no markdown formatting."""
                 {
                     "instrument": "SPY",
                     "directional_bias": "NEUTRAL",
-                    "one_week_thesis": "Testing support at key levels",
-                    "primary_risks": "Volatility spike, liquidity concerns",
-                    "watch_indicators": ["RSI", "VIX", "SPY 200-day MA"],
-                    "invalidation_rule": "Break below 4700"
+                    "one_week_thesis": "Awaiting Fed policy signals and economic data releases",
+                    "primary_risks": "Policy uncertainty, geopolitical tensions",
+                    "key_catalysts": ["FOMC minutes", "NFP report"]
                 },
                 {
                     "instrument": "TLT",
                     "directional_bias": "LONG",
-                    "one_week_thesis": "Yields attractive vs equities",
-                    "primary_risks": "Fed rate hike, inflation concerns",
-                    "watch_indicators": ["10Y yield", "TLT volume"],
-                    "invalidation_rule": "Yield spike above 4.5%"
+                    "one_week_thesis": "Yields attractive relative to equity risk premiums given macro regime",
+                    "primary_risks": "Fed rate hike expectations, inflation data surprises",
+                    "key_catalysts": ["Fed policy signals", "Inflation data"]
                 }
             ],
             "event_calendar_next_7d": [

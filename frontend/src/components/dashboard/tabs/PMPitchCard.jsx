@@ -166,7 +166,14 @@ export function PMPitchCard({ pitch }) {
                             </ul>
                         </div>
 
-                        {pitch.exit_policy && (
+                        {pitch.direction === 'FLAT' ? (
+                            <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-md text-sm">
+                                <span className="font-semibold text-blue-500">Neutral Position (FLAT)</span>
+                                <div className="mt-2 text-muted-foreground">
+                                    <div><span className="font-medium">No risk profile, stop loss, or take profit for neutral positions</span></div>
+                                </div>
+                            </div>
+                        ) : pitch.exit_policy && (
                             <div className="p-3 bg-purple-500/5 border border-purple-500/20 rounded-md text-sm">
                                 <span className="font-semibold text-purple-500">Risk Profile: {pitch.risk_profile || 'BASE'}</span>
                                 <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">

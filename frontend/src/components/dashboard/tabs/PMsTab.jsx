@@ -243,12 +243,18 @@ export default function PMsTab() {
   const [pmStatus, setPmStatus] = useState(() => {
     return sessionStorage.getItem('pm_status') || 'idle';
   });
-  const [jobId, setJobId] = useState(() => {
-    return sessionStorage.getItem('pm_job_id') || '';
+  // Track per-model job IDs and status
+  const [modelJobIds, setModelJobIds] = useState(() => {
+    const saved = sessionStorage.getItem('pm_model_job_ids');
+    return saved ? JSON.parse(saved) : {};
   });
   const [modelProgress, setModelProgress] = useState(() => {
     const saved = sessionStorage.getItem('pm_model_progress');
     return saved ? JSON.parse(saved) : {};
+  });
+  // Legacy jobId for backward compatibility (used when generating all models)
+  const [jobId, setJobId] = useState(() => {
+    return sessionStorage.getItem('pm_job_id') || '';
   });
   const [pitches, setPitches] = useState(() => {
     const saved = sessionStorage.getItem('pm_pitches');
@@ -269,9 +275,10 @@ export default function PMsTab() {
     sessionStorage.setItem('pm_selected_research', selectedResearch);
     sessionStorage.setItem('pm_status', pmStatus);
     sessionStorage.setItem('pm_job_id', jobId);
+    sessionStorage.setItem('pm_model_job_ids', JSON.stringify(modelJobIds));
     sessionStorage.setItem('pm_model_progress', JSON.stringify(modelProgress));
     sessionStorage.setItem('pm_pitches', JSON.stringify(pitches));
-  }, [selectedResearch, pmStatus, jobId, modelProgress, pitches]);
+  }, [selectedResearch, pmStatus, jobId, modelJobIds, modelProgress, pitches]);
 
   // Resume polling if page was refreshed during generation
   useEffect(() => {
@@ -465,13 +472,94 @@ export default function PMsTab() {
     setPollingInterval(interval);
   };
 
+  // Poll for a single model's job
+  const startPollingForModel = (jid, modelKey) => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/pitches/status?job_id=${jid}`);
+        if (!response.ok) {
+          clearInterval(interval);
+          setModelProgress(prev => ({
+            ...prev,
+            [modelKey]: { status: 'error', message: 'Failed to fetch status' }
+          }));
+          // Remove job ID when done
+          setModelJobIds(prev => {
+            const next = { ...prev };
+            delete next[modelKey];
+            return next;
+          });
+          return;
+        }
+
+        const status = await response.json();
+
+        // Update this model's progress
+        if (status[modelKey]) {
+          setModelProgress(prev => ({
+            ...prev,
+            [modelKey]: status[modelKey]
+          }));
+        }
+
+        // Check if complete or error
+        if (status.status === 'complete' || status.status === 'error') {
+          clearInterval(interval);
+          
+          // Update final status
+          if (status[modelKey]) {
+            setModelProgress(prev => ({
+              ...prev,
+              [modelKey]: status[modelKey]
+            }));
+          }
+
+          // Reload pitches to get the new one
+          if (latestReport) {
+            const date = latestReport.created_at || latestReport.date;
+            loadLatestPitches(latestReport.week_id, date);
+          }
+
+          // Remove job ID when done
+          setModelJobIds(prev => {
+            const next = { ...prev };
+            delete next[modelKey];
+            return next;
+          });
+        }
+      } catch (error) {
+        console.error('Polling error for model:', modelKey, error);
+        clearInterval(interval);
+        setModelProgress(prev => ({
+          ...prev,
+          [modelKey]: { status: 'error', message: error.message }
+        }));
+        setModelJobIds(prev => {
+          const next = { ...prev };
+          delete next[modelKey];
+          return next;
+        });
+      }
+    }, 2500);
+
+    // Store interval per model (we'll need to track multiple intervals)
+    // For now, just let it run - we'll clean up on unmount
+  };
+
   const handleGeneratePitches = async (modelKey = null) => {
     if (!selectedResearch) return;
 
     try {
-      setPmStatus('generating');
-      // Only reset progress if generating ALL
-      if (!modelKey) {
+      // If generating a single model, track it separately
+      if (modelKey) {
+        // Set this model's status to generating
+        setModelProgress(prev => ({
+          ...prev,
+          [modelKey]: { status: 'running', progress: 10, message: 'Initializing...' }
+        }));
+      } else {
+        // Generating all models - use global status
+        setPmStatus('generating');
         setModelProgress({});
         setPitches([]);
       }
@@ -492,11 +580,30 @@ export default function PMsTab() {
       }
 
       const result = await response.json();
-      setJobId(result.job_id);
-      startPolling(result.job_id);
+      
+      if (modelKey) {
+        // Track per-model job ID
+        setModelJobIds(prev => ({
+          ...prev,
+          [modelKey]: result.job_id
+        }));
+        // Start polling for this specific model
+        startPollingForModel(result.job_id, modelKey);
+      } else {
+        // All models - use legacy jobId
+        setJobId(result.job_id);
+        startPolling(result.job_id);
+      }
     } catch (error) {
       console.error('Error starting pitch generation:', error);
-      setPmStatus('error');
+      if (modelKey) {
+        setModelProgress(prev => ({
+          ...prev,
+          [modelKey]: { status: 'error', message: error.message }
+        }));
+      } else {
+        setPmStatus('error');
+      }
     }
   };
 
@@ -675,7 +782,7 @@ export default function PMsTab() {
       {PM_MODELS.map(model => {
         const pitch = pitches.find(p => (p.model === model.key || p.pm_model === model.key));
         const progress = modelProgress[model.key];
-        const isGenerating = pmStatus === 'generating' && progress && progress.status !== 'complete' && progress.status !== 'error';
+        const isGenerating = progress && progress.status === 'running';
 
         if (isGenerating) {
           return (
@@ -713,7 +820,7 @@ export default function PMsTab() {
                 variant="outline"
                 className="w-full text-xs"
                 onClick={() => handleGeneratePitches(model.key)}
-                disabled={pmStatus === 'generating'}
+                disabled={modelProgress[model.key]?.status === 'running'}
               >
                 <RefreshCw className="mr-2 h-3 w-3" /> Generate New Report
               </Button>
@@ -761,7 +868,7 @@ export default function PMsTab() {
               size="sm"
               className="w-full text-xs"
               onClick={() => handleGeneratePitches(model.key)}
-              disabled={pmStatus === 'generating'}
+              disabled={modelProgress[model.key]?.status === 'running'}
             >
               <Play className="mr-2 h-3 w-3" /> Generate New Report
             </Button>
