@@ -14,7 +14,7 @@ from backend.pipeline.weekly_pipeline import (
     WeeklyTradingPipeline,
     run_weekly_pipeline,
     run_research_only,
-    run_pm_pitches_only
+    run_pm_pitches_only,
 )
 from backend.pipeline.context import USER_QUERY
 from backend.pipeline.stages.checkpoint import run_checkpoint, run_all_checkpoints
@@ -32,7 +32,9 @@ def cli():
 @click.argument("query", default="")
 def council(query: str):
     """Run 3-stage council pipeline on a query (original llm-council pattern)."""
-    click.echo("Council command not yet implemented - requires original llm-council stages")
+    click.echo(
+        "Council command not yet implemented - requires original llm-council stages"
+    )
     click.echo("Use 'run_weekly' for the trading pipeline instead")
 
 
@@ -87,11 +89,17 @@ def checkpoint(time: Optional[str]):
                 actions = result.get("actions", [])
                 click.echo(f"\nEvaluated {len(actions)} positions")
                 for action in actions:
-                    click.echo(f"  - {action['account']}: {action['instrument']} {action['action']}")
+                    click.echo(
+                        f"  - {action['account']}: {action['instrument']} {action['action']}"
+                    )
             else:
-                click.echo(f"\n❌ Checkpoint failed: {result.get('error', 'Unknown error')}")
+                click.echo(
+                    f"\n❌ Checkpoint failed: {result.get('error', 'Unknown error')}"
+                )
         else:
-            click.echo("Please specify a checkpoint time with --time (e.g., --time 09:00)")
+            click.echo(
+                "Please specify a checkpoint time with --time (e.g., --time 09:00)"
+            )
 
     asyncio.run(run())
 
@@ -118,7 +126,9 @@ def run_checkpoints(all_checkpoints: bool):
                 for time_str, cp_result in checkpoints.items():
                     click.echo(f"\n🕐 {time_str}: {cp_result.get('message', 'Done')}")
             else:
-                click.echo(f"\n❌ Checkpoints failed: {result.get('error', 'Unknown error')}")
+                click.echo(
+                    f"\n❌ Checkpoints failed: {result.get('error', 'Unknown error')}"
+                )
         else:
             click.echo("Use --all flag to run all checkpoints")
 
@@ -149,15 +159,19 @@ def status():
     click.echo(f"Working Directory: {Path.cwd()}")
     click.echo(f"Environment: {os.getenv('ENV', 'development')}")
 
-    if os.getenv("OPENROUTER_API_KEY"):
-        click.echo("✓ OpenRouter API key configured")
+    if os.getenv("REQUESTY_API_KEY"):
+        click.echo("✓ Requesty API key configured")
     else:
-        click.echo("✗ OpenRouter API key missing")
+        click.echo("✗ Requesty API key missing")
 
-    if os.getenv("APCA_API_KEY_ID"):
-        click.echo("✓ Alpaca API key configured")
+    alpaca_keys = [
+        os.getenv(f"ALPACA_{acc}_KEY_ID")
+        for acc in ["CHATGPT", "GEMINI", "CLAUDE", "GROQ", "DEEPSEEK", "COUNCIL"]
+    ]
+    if any(alpaca_keys):
+        click.echo("✓ Alpaca API keys configured")
     else:
-        click.echo("✗ Alpaca API key missing")
+        click.echo("✗ Alpaca API keys missing")
 
     if os.getenv("GEMINI_API_KEY"):
         click.echo("✓ Gemini API key configured")
