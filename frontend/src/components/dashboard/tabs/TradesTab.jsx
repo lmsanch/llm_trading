@@ -1,14 +1,94 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
-import { Play, CheckCircle, XCircle, RefreshCw, Settings2 } from 'lucide-react';
-import { mockTrades } from '../../../lib/mockData';
+import { Play, CheckCircle, XCircle, RefreshCw, Settings2, Loader2 } from 'lucide-react';
+import { tradingApi } from '../../../api/trading';
 import { cn } from "../../../lib/utils";
 
 export default function TradesTab() {
-  const pendingTrades = mockTrades.filter(t => t.status === 'pending');
-  const historyTrades = mockTrades.filter(t => t.status !== 'pending');
+  const [pendingTrades, setPendingTrades] = useState([]);
+  const [historyTrades, setHistoryTrades] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [executing, setExecuting] = useState(false);
+  const [selectedTrades, setSelectedTrades] = useState(new Set());
+
+  useEffect(() => {
+    loadTrades();
+  }, []);
+
+  const loadTrades = async () => {
+    try {
+      setLoading(true);
+      const data = await tradingApi.getPendingTrades();
+      
+      // Separate pending and history trades
+      const pending = data.filter(t => t.status === 'pending') || [];
+      const history = data.filter(t => t.status !== 'pending') || [];
+      
+      setPendingTrades(pending);
+      setHistoryTrades(history);
+    } catch (error) {
+      console.error('Error loading trades:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApprove = (tradeId) => {
+    setSelectedTrades(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(tradeId)) {
+        newSet.delete(tradeId);
+      } else {
+        newSet.add(tradeId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleReject = (tradeId) => {
+    // For now, just remove from pending trades
+    setPendingTrades(prev => prev.filter(t => t.id !== tradeId));
+  };
+
+  const handleExecuteAll = async () => {
+    if (selectedTrades.size === 0) {
+      alert('Please select at least one trade to execute');
+      return;
+    }
+
+    try {
+      setExecuting(true);
+      const tradeIds = Array.from(selectedTrades);
+      const result = await tradingApi.executeTrades(tradeIds);
+      
+      console.log('Execution result:', result);
+      
+      // Refresh trades after execution
+      await loadTrades();
+      setSelectedTrades(new Set());
+      
+      // Show success message
+      if (result.status === 'success') {
+        alert(`Successfully executed ${tradeIds.length} trade(s)`);
+      }
+    } catch (error) {
+      console.error('Error executing trades:', error);
+      alert('Failed to execute trades. Please try again.');
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">Loading trades...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -28,11 +108,14 @@ export default function TradesTab() {
             Pending Orders <Badge variant="outline" className="ml-2">{pendingTrades.length}</Badge>
         </h3>
         {pendingTrades.map((trade) => (
-            <Card key={trade.id} className="overflow-hidden">
+            <Card key={trade.id} className={cn(
+                "overflow-hidden transition-colors",
+                selectedTrades.has(trade.id) && "border-green-500 bg-green-50/10"
+            )}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between p-4 gap-4">
                     <div className="flex items-center gap-6">
                         <div className="min-w-[100px]">
-                            <Badge variant="outline" className="mb-1">{trade.account}</Badge>
+                            <Badge variant="outline" className="mb-1">{trade.account || 'COUNCIL'}</Badge>
                             <div className="text-2xl font-bold">{trade.symbol}</div>
                         </div>
                         <div className="space-y-1">
@@ -52,11 +135,24 @@ export default function TradesTab() {
                         <Button variant="outline" size="sm">
                             <Settings2 className="h-4 w-4 mr-2" /> Modify
                         </Button>
-                        <Button variant="outline" size="sm" className="text-red-500 hover:text-red-600">
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="text-red-500 hover:text-red-600"
+                            onClick={() => handleReject(trade.id)}
+                        >
                             <XCircle className="h-4 w-4 mr-2" /> Reject
                         </Button>
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700">
-                            <CheckCircle className="h-4 w-4 mr-2" /> Approve
+                        <Button 
+                            size="sm" 
+                            className={cn(
+                                "bg-green-600 hover:bg-green-700",
+                                selectedTrades.has(trade.id) && "bg-green-700"
+                            )}
+                            onClick={() => handleApprove(trade.id)}
+                        >
+                            <CheckCircle className="h-4 w-4 mr-2" /> 
+                            {selectedTrades.has(trade.id) ? 'Selected' : 'Approve'}
                         </Button>
                     </div>
                 </div>
@@ -88,8 +184,8 @@ export default function TradesTab() {
                             {trade.status.toUpperCase()}
                         </Badge>
                     </div>
-                    <div className="text-muted-foreground">10:42 AM</div>
-                    <div>{trade.account}</div>
+                    <div className="text-muted-foreground">{trade.timestamp || '10:42 AM'}</div>
+                    <div>{trade.account || 'COUNCIL'}</div>
                     <div className="font-medium">{trade.symbol}</div>
                     <div className={trade.direction === 'BUY' ? 'text-green-500' : 'text-red-500'}>
                         {trade.direction}
@@ -97,15 +193,38 @@ export default function TradesTab() {
                     <div className="text-right font-mono">{trade.qty}</div>
                 </div>
             ))}
+            {historyTrades.length === 0 && (
+                <div className="text-center py-6 text-muted-foreground">
+                    No execution history yet.
+                </div>
+            )}
         </div>
       </div>
 
        <div className="flex items-center justify-end gap-4 pt-4 border-t sticky bottom-0 bg-background pb-4">
-        <Button variant="outline">
-            <RefreshCw className="mr-2 h-4 w-4" /> Refresh Status
+        <Button 
+            variant="outline"
+            onClick={loadTrades}
+            disabled={loading}
+        >
+            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> 
+            Refresh Status
         </Button>
-        <Button>
-            <Play className="mr-2 h-4 w-4" /> Execute All Approved
+        <Button 
+            onClick={handleExecuteAll}
+            disabled={executing || selectedTrades.size === 0}
+        >
+            {executing ? (
+                <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+                    Executing...
+                </>
+            ) : (
+                <>
+                    <Play className="mr-2 h-4 w-4" /> 
+                    Execute {selectedTrades.size > 0 ? `(${selectedTrades.size})` : 'All Approved'}
+                </>
+            )}
         </Button>
       </div>
 

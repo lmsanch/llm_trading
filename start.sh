@@ -61,7 +61,7 @@ echo ""
 
 # Start backend
 echo "Starting backend on http://localhost:$PORT_BACKEND..."
-uv run python -m backend.main &
+uvicorn backend.main:app &
 BACKEND_PID=$!
 
 # Wait a bit for backend to start

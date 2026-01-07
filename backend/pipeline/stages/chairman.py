@@ -72,10 +72,10 @@ class ChairmanStage(Stage):
         )
 
         print(
-            f"  ✅ Council decision: {chairman_decision['instrument']} {chairman_decision['direction']}"
+            f"  ✅ Council decision: {chairman_decision.get('instrument', 'N/A')} {chairman_decision.get('direction', 'N/A')}"
         )
         print(
-            f"  Conviction: {chairman_decision['conviction']} | Horizon: {chairman_decision['horizon']}"
+            f"  Conviction: {chairman_decision.get('conviction', 0)} | Horizon: {chairman_decision.get('horizon', 'N/A')}"
         )
 
         # Return context with chairman decision
@@ -149,7 +149,7 @@ Be decisive but thorough. Acknowledge dissent where appropriate.""",
         pitches_text = "\n\n".join(
             [
                 f"### {pitch.get('model_info', {}).get('account', 'Unknown')} ({pitch['model']})\n"
-                f"**Instrument:** {pitch['instrument']}\n"
+                f"**Instrument:** {pitch.get('selected_instrument', pitch.get('instrument', 'N/A'))}\n"
                 f"**Direction:** {pitch['direction']}\n"
                 f"**Horizon:** {pitch['horizon']}\n"
                 f"**Conviction:** {pitch['conviction']}\n"
@@ -158,8 +158,8 @@ Be decisive but thorough. Acknowledge dissent where appropriate.""",
                     [f"  - {bullet}" for bullet in pitch.get("thesis_bullets", [])]
                 )
                 + f"\n**Risk Profile:** {pitch.get('risk_profile', 'BASE')}\n"
-                + f"**Exit Policy:** Stop Loss: {pitch.get('exit_policy', {}).get('stop_loss_pct', 0) * 100:.1f}%, Take Profit: {pitch.get('exit_policy', {}).get('take_profit_pct', 0) * 100:.1f}%, Time Stop: {pitch.get('exit_policy', {}).get('time_stop_days', 7)} days\n"
-                + f"**Entry Policy:** {pitch.get('entry_policy', {}).get('mode', 'MOO')}\n"
+                + f"**Exit Policy:** Stop Loss: {(pitch.get('exit_policy') or {}).get('stop_loss_pct', 0) * 100:.1f}%, Take Profit: {(pitch.get('exit_policy') or {}).get('take_profit_pct', 0) * 100:.1f}%, Time Stop: {(pitch.get('exit_policy') or {}).get('time_stop_days', 7)} days\n"
+                + f"**Entry Policy:** {pitch.get('entry_policy', {}).get('mode', 'limit')}\n"
                 + f"**Risk Notes:** {pitch.get('risk_notes', 'N/A')}\n"
                 for pitch in pm_pitches
             ]
@@ -168,7 +168,7 @@ Be decisive but thorough. Acknowledge dissent where appropriate.""",
         # Format peer reviews
         reviews_text = "\n\n".join(
             [
-                f"### {review.get('reviewer_model', {}).get('account', 'Unknown')} Review of {review.get('pitch_label', 'Unknown')}\n"
+                f"### {review.get('reviewer_model', 'Unknown')} Review of {review.get('pitch_label', 'Unknown')}\n"
                 f"**Average Score:** {review.get('average_score', 0)}/10\n"
                 f"**Scores:**\n"
                 + "\n".join(
@@ -314,9 +314,6 @@ Return as valid JSON only, no markdown formatting."""
                 print(f"  ⚠️  Invalid direction: {selected_trade.get('direction')}")
                 return self._fallback_decision([])
 
-            if selected_trade.get("horizon") not in ["1d", "3d", "1w"]:
-                print(f"  ⚠️  Invalid horizon: {selected_trade.get('horizon')}")
-                return self._fallback_decision([])
 
             conviction = decision.get("conviction", 0)
             if not isinstance(conviction, (int, float)):
@@ -401,7 +398,9 @@ Return as valid JSON only, no markdown formatting."""
             "decision_id": str(uuid.uuid4()),
             "week_id": datetime.utcnow().strftime("%Y-%m-%d"),
             "selected_trade": {
-                "instrument": best_pitch["instrument"],
+                "instrument": best_pitch.get(
+                    "selected_instrument", best_pitch.get("instrument", "N/A")
+                ),
                 "direction": best_pitch["direction"],
                 "horizon": best_pitch.get("horizon", "1w"),
             },

@@ -45,7 +45,7 @@ RISK_PROFILES = {
 }
 
 # Valid entry modes (NONE is only for FLAT, validated separately)
-ENTRY_MODES = ["MOO", "limit"]
+ENTRY_MODES = ["limit"]
 
 # Valid event triggers for early exit
 EXIT_EVENTS = ["NFP", "CPI", "FOMC"]
@@ -253,7 +253,7 @@ Return EXACTLY this JSON structure (replace week_id and asof_et with current val
     "Policy: Insufficient macro clarity for directional trade",
     "Risk: Market conditions require neutral stance"
   ],
-  "entry_policy": {"mode": "MOO", "limit_price": null},
+  "entry_policy": {"mode": "limit", "limit_price": null},
   "exit_policy": {"time_stop_days": 7, "stop_loss_pct": 0.015, "take_profit_pct": 0.025, "exit_before_events": []},
   "consensus_map": {"research_pack_a": "neutral", "research_pack_b": "neutral"},
   "risk_notes": "Macro uncertainty requires neutral positioning",
@@ -436,7 +436,7 @@ Thesis bullet rules:
     "Policy: Fiscal stimulus expectations"
   ],
   "entry_policy": {{
-    "mode": "MOO",
+    "mode": "limit",
     "limit_price": null
   }},
   "exit_policy": {{
@@ -950,11 +950,6 @@ Return as valid JSON only, no markdown formatting."""
             return None
         
         # Direction already validated above
-        
-        # Validate horizon (v1 only supports 1W)
-        if pitch["horizon"] != "1W":
-            print(f"  ⚠️  Invalid horizon: {pitch['horizon']} (v1 only supports 1W)")
-            return None
         
         # Validate conviction
         conviction = pitch.get("conviction", 0)

@@ -1,7 +1,7 @@
 // API client for trading system
 // Supports switching between mock data and real backend
 
-const BASE_URL = 'http://100.100.238.72:8000/api';
+const BASE_URL = 'http://100.100.238.72:8200/api';
 const USE_MOCK = false;
 
 import { mockResearchPacks, mockPMPitches, mockCouncilDecision, mockTrades, mockPositions, mockAccounts } from '../lib/mockData';
@@ -71,7 +71,7 @@ export const tradingApi = {
   executeTrades: async (tradeIds) => {
     const res = await fetch(`${BASE_URL}/trades/execute`, {
         method: 'POST',
-        body: JSON.stringify({ tradeIds }),
+        body: JSON.stringify({ trade_ids: tradeIds }),
         headers: { 'Content-Type': 'application/json' }
     });
     return res.json();

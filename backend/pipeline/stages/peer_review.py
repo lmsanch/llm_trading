@@ -111,11 +111,14 @@ class PeerReviewStage(Stage):
             anonymized_pitch["original_account"] = pitch.get("model_info", {}).get(
                 "account", "Unknown"
             )
-            anonymized_pitch["instrument"] = pitch["instrument"]
-            anonymized_pitch["direction"] = pitch["direction"]
-            anonymized_pitch["horizon"] = pitch["horizon"]
-            anonymized_pitch["thesis_bullets"] = pitch["thesis_bullets"]
-            anonymized_pitch["conviction"] = pitch["conviction"]
+            # Use selected_instrument (v2 schema) or fall back to instrument (v1)
+            anonymized_pitch["instrument"] = pitch.get(
+                "selected_instrument"
+            ) or pitch.get("instrument", "FLAT")
+            anonymized_pitch["direction"] = pitch.get("direction", "FLAT")
+            anonymized_pitch["horizon"] = pitch.get("horizon", "1W")
+            anonymized_pitch["thesis_bullets"] = pitch.get("thesis_bullets", [])
+            anonymized_pitch["conviction"] = pitch.get("conviction", 0)
             anonymized_pitch["risk_profile"] = pitch.get("risk_profile", "BASE")
             anonymized_pitch["entry_policy"] = pitch.get("entry_policy", {})
             anonymized_pitch["exit_policy"] = pitch.get("exit_policy", {})
@@ -185,26 +188,81 @@ Be fair but critical. Identify weaknesses and suggest improvements.""",
         self, anonymized_pitches: List[Dict[str, Any]]
     ) -> str:
         """Build prompt for peer review."""
+        # region agent log
+        try:
+            import json, time
+
+            with open("/research/llm_trading/.cursor/debug.log", "a") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "debug-session",
+                            "runId": "pre-fix",
+                            "hypothesisId": "H2",
+                            "location": "peer_review.py:_build_peer_review_prompt:start",
+                            "message": "Peer review prompt build start",
+                            "data": {"count": len(anonymized_pitches)},
+                            "timestamp": int(time.time() * 1000),
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+        # endregion
+
         # Format pitches for prompt
         pitches_text = "\n\n".join(
             [
                 f"### {pitch['anonymized_label']}\n"
-                f"**Instrument:** {pitch['instrument']}\n"
+                f"**Instrument:** {pitch.get('selected_instrument', pitch.get('instrument', 'N/A'))}\n"
                 f"**Direction:** {pitch['direction']}\n"
                 f"**Horizon:** {pitch['horizon']}\n"
                 f"**Conviction:** {pitch['conviction']}\n"
                 f"**Thesis:**\n"
                 + "\n".join([f"  - {bullet}" for bullet in pitch["thesis_bullets"]])
-                + f"\n**Risk Profile:** {pitch.get('risk_profile', 'BASE')}\n"
-                + f"**Exit Policy:**\n"
-                + f"  Stop Loss: {pitch.get('exit_policy', {}).get('stop_loss_pct', 0) * 100:.1f}%\n"
-                + f"  Take Profit: {pitch.get('exit_policy', {}).get('take_profit_pct', 0) * 100:.1f}%\n"
-                + f"  Time Stop: {pitch.get('exit_policy', {}).get('time_stop_days', 7)} days\n"
-                + f"**Entry Policy:** {pitch.get('entry_policy', {}).get('mode', 'MOO')}\n"
+                + f"\n**Risk Profile:** {pitch.get('risk_profile', 'BASE') or 'NONE'}\n"
+                + (
+                    f"**Exit Policy:**\n"
+                    f"  Stop Loss: {(pitch.get('exit_policy') or {}).get('stop_loss_pct', 0) * 100:.1f}%\n"
+                    f"  Take Profit: {(pitch.get('exit_policy') or {}).get('take_profit_pct', 0) * 100:.1f}%\n"
+                    f"  Time Stop: {(pitch.get('exit_policy') or {}).get('time_stop_days', 7)} days\n"
+                    if pitch.get("exit_policy")
+                    else "**Exit Policy:** N/A (FLAT position)\n"
+                )
+                + f"**Entry Policy:** {(pitch.get('entry_policy') or {}).get('mode', 'limit')}\n"
                 + f"**Risk Notes:** {pitch.get('risk_notes', 'N/A')}\n"
                 for pitch in anonymized_pitches
             ]
         )
+
+        # region agent log
+        try:
+            import json, time
+
+            sample = anonymized_pitches[0] if anonymized_pitches else {}
+            with open("/research/llm_trading/.cursor/debug.log", "a") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "debug-session",
+                            "runId": "pre-fix",
+                            "hypothesisId": "H3",
+                            "location": "peer_review.py:_build_peer_review_prompt:sample",
+                            "message": "Sample pitch exit/entry",
+                            "data": {
+                                "direction": sample.get("direction"),
+                                "exit_policy": sample.get("exit_policy"),
+                                "entry_policy": sample.get("entry_policy"),
+                            },
+                            "timestamp": int(time.time() * 1000),
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+        # endregion
 
         prompt = f"""You are evaluating trading recommendations from multiple portfolio managers.
 
@@ -280,57 +338,124 @@ IMPORTANT:
         """
         import json
         import uuid
+        from json import JSONDecodeError, JSONDecoder
 
-        # Try to extract JSON from response
-        json_match = re.search(r"\{.*\}", content, re.DOTALL)
+        # region agent log
+        try:
+            import time
 
-        if not json_match:
+            with open("/research/llm_trading/.cursor/debug.log", "a") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "debug-session",
+                            "runId": "pre-fix",
+                            "hypothesisId": "H4",
+                            "location": "peer_review.py:_parse_peer_review:start",
+                            "message": "Parsing peer review",
+                            "data": {
+                                "reviewer": reviewer_model,
+                                "content_head": content[:200],
+                            },
+                            "timestamp": int(time.time() * 1000),
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+        # endregion
+
+        # Strip common code fences from models
+        content_stripped = content.strip()
+        for fence in ["```json", "```", "~~~json", "~~~"]:
+            if content_stripped.lower().startswith(fence):
+                content_stripped = content_stripped[len(fence) :].strip()
+            if content_stripped.endswith(fence):
+                content_stripped = content_stripped[: -len(fence)].strip()
+
+        # Try to extract JSON from response (non-greedy)
+        review = None
+        json_match = re.search(r"\{.*?\}", content_stripped, re.DOTALL)
+        if json_match:
+            try:
+                review = json.loads(json_match.group(0))
+            except JSONDecodeError:
+                review = None
+
+        # Fallback: raw_decode first JSON object even with trailing text
+        if review is None:
+            try:
+                review, idx = JSONDecoder().raw_decode(content_stripped)
+                # region agent log
+                try:
+                    import time
+
+                    with open("/research/llm_trading/.cursor/debug.log", "a") as f:
+                        f.write(
+                            json.dumps(
+                                {
+                                    "sessionId": "debug-session",
+                                    "runId": "pre-fix",
+                                    "hypothesisId": "H4",
+                                    "location": "peer_review.py:_parse_peer_review:raw_decode_fallback",
+                                    "message": "Used raw_decode fallback",
+                                    "data": {"reviewer": reviewer_model, "idx": idx},
+                                    "timestamp": int(time.time() * 1000),
+                                }
+                            )
+                            + "\n"
+                        )
+                except Exception:
+                    pass
+                # endregion
+            except JSONDecodeError as e:
+                print(f"  ⚠️  JSON decode error: {e}")
+                return None
+
+        if review is None:
             print(f"  ⚠️  No JSON found in review from {reviewer_model}")
             return None
 
-        json_str = json_match.group(0)
+        # If model returned a list of reviews, take the first element
+        if isinstance(review, list):
+            if not review:
+                print(f"  ⚠️  Empty review list from {reviewer_model}")
+                return None
+            review = review[0]
 
-        try:
-            review = json.loads(json_str)
+        # Validate required fields
+        required_fields = [
+            "review_id",
+            "pitch_label",
+            "reviewer_model",
+            "scores",
+            "best_argument_against",
+            "one_flip_condition",
+            "suggested_fix",
+        ]
 
-            # Validate required fields
-            required_fields = [
-                "review_id",
-                "pitch_label",
-                "reviewer_model",
-                "scores",
-                "best_argument_against",
-                "one_flip_condition",
-                "suggested_fix",
-            ]
+        for field in required_fields:
+            if field not in review:
+                print(f"  ⚠️  Missing field: {field}")
+                return None
 
-            for field in required_fields:
-                if field not in review:
-                    print(f"  ⚠️  Missing field: {field}")
-                    return None
+        # Validate scores
+        scores = review.get("scores", {})
+        for dimension in self.RUBRIC_DIMENSIONS:
+            if dimension not in scores:
+                print(f"  ⚠️  Missing score dimension: {dimension}")
+                return None
+            score = scores[dimension]
+            if not isinstance(score, int) or score < 1 or score > 10:
+                print(f"  ⚠️  Invalid score for {dimension}: {score}")
+                return None
 
-            # Validate scores
-            scores = review.get("scores", {})
-            for dimension in self.RUBRIC_DIMENSIONS:
-                if dimension not in scores:
-                    print(f"  ⚠️  Missing score dimension: {dimension}")
-                    return None
-                score = scores[dimension]
-                if not isinstance(score, int) or score < 1 or score > 10:
-                    print(f"  ⚠️  Invalid score for {dimension}: {score}")
-                    return None
+        # Calculate average score
+        valid_scores = [scores[dim] for dim in self.RUBRIC_DIMENSIONS if dim in scores]
+        average_score = sum(valid_scores) / len(valid_scores) if valid_scores else 0
 
-            # Calculate average score
-            valid_scores = [
-                scores[dim] for dim in self.RUBRIC_DIMENSIONS if dim in scores
-            ]
-            average_score = sum(valid_scores) / len(valid_scores) if valid_scores else 0
+        review["average_score"] = round(average_score, 2)
+        review["timestamp"] = datetime.utcnow().isoformat()
 
-            review["average_score"] = round(average_score, 2)
-            review["timestamp"] = datetime.utcnow().isoformat()
-
-            return review
-
-        except json.JSONDecodeError as e:
-            print(f"  ⚠️  JSON decode error: {e}")
-            return None
+        return review

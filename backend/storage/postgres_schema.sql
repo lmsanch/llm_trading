@@ -159,16 +159,20 @@ CREATE TABLE IF NOT EXISTS peer_reviews (
     reviewer_model VARCHAR(100) NOT NULL,
 
     -- Anonymized label (A, B, C, D, E)
-    pitch_label VARCHAR(5) NOT NULL,
+    pitch_label VARCHAR(10) NOT NULL,
 
     -- Full review (stored as JSONB)
     review_data JSONB NOT NULL,
+
+    -- Research report association
+    research_date TIMESTAMPTZ,
 
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_peer_reviews_week ON peer_reviews(week_id);
 CREATE INDEX IF NOT EXISTS idx_peer_reviews_pitch ON peer_reviews(pitch_id);
+CREATE INDEX IF NOT EXISTS idx_peer_reviews_research_date ON peer_reviews(research_date);
 
 -- ============================================================================
 -- CHAIRMAN DECISIONS (RAW STORAGE)
@@ -176,13 +180,21 @@ CREATE INDEX IF NOT EXISTS idx_peer_reviews_pitch ON peer_reviews(pitch_id);
 
 CREATE TABLE IF NOT EXISTS chairman_decisions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    week_id VARCHAR(10) NOT NULL UNIQUE,
+    week_id VARCHAR(10) NOT NULL,
 
     -- Full decision (stored as JSONB)
     decision_data JSONB NOT NULL,
 
+    -- Research report association
+    research_date TIMESTAMPTZ,
+
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Allow multiple council decisions per week (one per research report)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chairman_decisions_week_research 
+    ON chairman_decisions(week_id, research_date);
+CREATE INDEX IF NOT EXISTS idx_chairman_decisions_research_date ON chairman_decisions(research_date);
 
 -- ============================================================================
 -- EXECUTION EVENTS (Event Sourcing)

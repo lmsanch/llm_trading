@@ -3,13 +3,17 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import uuid
 import json
 import asyncio
 from datetime import datetime
 import time
+
+# Alpaca integration
+from .alpaca_integration import MultiAlpacaManager
+from .alpaca_integration.orders import create_bracket_order_from_pitch
 import os
 from pathlib import Path
 
@@ -43,11 +47,11 @@ from .pipeline.stages.pm_pitch import (
 from .pipeline.stages.peer_review import PeerReviewStage, PEER_REVIEWS
 from .pipeline.stages.chairman import ChairmanStage, CHAIRMAN_DECISION
 from .pipeline.stages.execution import ExecutionStage, EXECUTION_RESULT
-from .multi_alpaca_client import MultiAlpacaManager
 
 app = FastAPI(title="LLM Council API")
 
-#region agent log
+
+# region agent log
 def _agent_log(payload: Dict[str, Any]) -> None:
     """Append NDJSON debug log for backend instrumentation."""
     try:
@@ -57,7 +61,9 @@ def _agent_log(payload: Dict[str, Any]) -> None:
             f.write(json.dumps(payload) + "\n")
     except Exception:
         pass
-#endregion
+
+
+# endregion
 
 # Enable CORS for local development and Tailscale VPN
 from backend.config import get_cors_origins
@@ -371,6 +377,53 @@ def _fetch_current_prices_sync():
         return None
 
 
+async def _find_pitch_by_id(pitch_id: int) -> Optional[Dict[str, Any]]:
+    """Retrieve PM pitch from database by ID."""
+    import psycopg2
+    
+    try:
+        db_name = os.getenv("DATABASE_NAME", "llm_trading")
+        db_user = os.getenv("DATABASE_USER", "luis")
+        
+        conn = psycopg2.connect(dbname=db_name, user=db_user)
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM pm_pitches WHERE id = %s",
+                    (pitch_id,)
+                )
+                result = cur.fetchone()
+                
+                if result:
+                    # Convert to dict
+                    columns = [desc[0] for desc in cur.description]
+                    pitch_dict = dict(zip(columns, result))
+                    
+                    # Parse JSON fields
+                    if pitch_dict.get('entry_policy'):
+                        try:
+                            pitch_dict['entry_policy'] = json.loads(pitch_dict['entry_policy'])
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    
+                    if pitch_dict.get('exit_policy'):
+                        try:
+                            pitch_dict['exit_policy'] = json.loads(pitch_dict['exit_policy'])
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    
+                    return pitch_dict
+                return None
+        
+        finally:
+            conn.close()
+    
+    except Exception as e:
+        print(f"Error fetching pitch {pitch_id}: {e}")
+        return None
+
+
 @app.on_event("startup")
 async def startup_event():
     print("Startup: Listing all registered routes:")
@@ -599,7 +652,7 @@ async def get_current_research():
 async def get_latest_research():
     """Get the latest research report from database."""
     import psycopg2
-    
+
     try:
         db_name = os.getenv("DATABASE_NAME", "llm_trading")
         db_user = os.getenv("DATABASE_USER", "luis")
@@ -653,7 +706,7 @@ async def get_latest_graphs():
     if report and report.get("structured_json"):
         return {
             "date": report.get("created_at"),
-            "weekly_graph": report.get("structured_json", {}).get("weekly_graph")
+            "weekly_graph": report.get("structured_json", {}).get("weekly_graph"),
         }
     return {}
 
@@ -670,12 +723,12 @@ async def get_latest_data_package():
     research = await get_latest_research()
     metrics = await get_market_metrics()
     prices = await get_current_prices()
-    
+
     return {
         "date": research.get("created_at") if research else None,
         "research": research,
         "market_metrics": metrics,
-        "current_prices": prices
+        "current_prices": prices,
     }
 
 
@@ -944,7 +997,9 @@ async def get_research_report(report_id: str):
 # --- PM PITCH ENDPOINTS ---
 
 
-def _save_pitches_to_db(week_id: str, pitches_raw: List[Dict[str, Any]], research_date: str = None):
+def _save_pitches_to_db(
+    week_id: str, pitches_raw: List[Dict[str, Any]], research_date: str = None
+):
     """Save raw PM pitches to database."""
     import psycopg2
 
@@ -957,25 +1012,27 @@ def _save_pitches_to_db(week_id: str, pitches_raw: List[Dict[str, Any]], researc
         try:
             with conn.cursor() as cur:
                 print(f"💾 Saving {len(pitches_raw)} pitches to DB for week {week_id}")
-                
-                #region agent log
-                _agent_log({
-                    "runId": "post-fix",
-                    "hypothesisId": "H3",
-                    "location": "main:_save_pitches_to_db:start",
-                    "message": "Saving pitches to DB",
-                    "data": {
-                        "week_id": week_id,
-                        "research_date": research_date,
-                        "count": len(pitches_raw)
+
+                # region agent log
+                _agent_log(
+                    {
+                        "runId": "post-fix",
+                        "hypothesisId": "H3",
+                        "location": "main:_save_pitches_to_db:start",
+                        "message": "Saving pitches to DB",
+                        "data": {
+                            "week_id": week_id,
+                            "research_date": research_date,
+                            "count": len(pitches_raw),
+                        },
                     }
-                })
-                #endregion
-                
+                )
+                # endregion
+
                 for pitch in pitches_raw:
                     model = pitch.get("model", "unknown")
                     account = pitch.get("model_info", {}).get("account", "UNKNOWN")
-                    
+
                     # Ensure timestamp exists
                     if "timestamp" not in pitch:
                         pitch["timestamp"] = datetime.utcnow().isoformat()
@@ -985,15 +1042,15 @@ def _save_pitches_to_db(week_id: str, pitches_raw: List[Dict[str, Any]], researc
                     if research_date:
                         cur.execute(
                             "DELETE FROM pm_pitches WHERE research_date = %s AND model = %s",
-                            (research_date, model)
+                            (research_date, model),
                         )
                     else:
                         # Fallback to week_id if research_date not provided
                         cur.execute(
                             "DELETE FROM pm_pitches WHERE week_id = %s AND model = %s",
-                            (week_id, model)
+                            (week_id, model),
                         )
-                    
+
                     # Insert new pitch
                     cur.execute(
                         """
@@ -1009,25 +1066,27 @@ def _save_pitches_to_db(week_id: str, pitches_raw: List[Dict[str, Any]], researc
                             pitch.get("selected_instrument") or pitch.get("instrument"),
                             pitch.get("direction"),
                             float(pitch.get("conviction", 0)),
-                            research_date
-                        )
+                            research_date,
+                        ),
                     )
-                
+
                 conn.commit()
                 print("✅ Pitches saved to DB")
-                #region agent log
-                _agent_log({
-                    "runId": "post-fix",
-                    "hypothesisId": "H3",
-                    "location": "main:_save_pitches_to_db:commit",
-                    "message": "Committed pitches to DB",
-                    "data": {
-                        "week_id": week_id,
-                        "research_date": research_date,
-                        "count": len(pitches_raw)
+                # region agent log
+                _agent_log(
+                    {
+                        "runId": "post-fix",
+                        "hypothesisId": "H3",
+                        "location": "main:_save_pitches_to_db:commit",
+                        "message": "Committed pitches to DB",
+                        "data": {
+                            "week_id": week_id,
+                            "research_date": research_date,
+                            "count": len(pitches_raw),
+                        },
                     }
-                })
-                #endregion
+                )
+                # endregion
 
         finally:
             conn.close()
@@ -1037,14 +1096,155 @@ def _save_pitches_to_db(week_id: str, pitches_raw: List[Dict[str, Any]], researc
         # Don't raise, just log error so pipeline doesn't crash
 
 
-def _load_pitches_from_db(week_id: str = None, research_date: str = None) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def _save_peer_reviews_to_db(
+    week_id: str,
+    peer_reviews: List[Dict[str, Any]],
+    research_date: str,
+    pm_pitches: List[Dict[str, Any]],
+    label_to_model: Dict[str, str],
+):
+    """Save peer reviews to database."""
+    import psycopg2
+
+    try:
+        db_name = os.getenv("DATABASE_NAME", "llm_trading")
+        db_user = os.getenv("DATABASE_USER", "luis")
+
+        conn = psycopg2.connect(dbname=db_name, user=db_user)
+
+        try:
+            with conn.cursor() as cur:
+                print(
+                    f"💾 Saving {len(peer_reviews)} peer reviews to DB for research_date {research_date}"
+                )
+
+                # Create mapping from model to pitch_id (look up pitch IDs from DB)
+                model_to_pitch_id = {}
+                for pitch in pm_pitches:
+                    model = pitch.get("model")
+                    if model:
+                        cur.execute(
+                            """
+                            SELECT id FROM pm_pitches 
+                            WHERE model = %s AND research_date = %s 
+                            ORDER BY created_at DESC LIMIT 1
+                            """,
+                            (model, research_date),
+                        )
+                        row = cur.fetchone()
+                        if row:
+                            model_to_pitch_id[model] = row[0]
+
+                # Delete existing peer reviews for this research_date
+                cur.execute(
+                    "DELETE FROM peer_reviews WHERE research_date = %s",
+                    (research_date,),
+                )
+
+                # Insert peer reviews
+                for review in peer_reviews:
+                    reviewer_model = review.get("reviewer_model", "unknown")
+                    pitch_label = review.get("pitch_label", "")
+
+                    # Map label (e.g., "Pitch A") back to model using label_to_model
+                    reviewed_model = label_to_model.get(pitch_label)
+                    if reviewed_model and reviewed_model in model_to_pitch_id:
+                        pitch_id = model_to_pitch_id[reviewed_model]
+
+                        print(
+                            f"  🔍 Inserting peer review: week_id='{week_id}' (len={len(week_id)}), pitch_label='{pitch_label}' (len={len(pitch_label)}), reviewer_model='{reviewer_model}' (len={len(reviewer_model)})"
+                        )
+
+                        cur.execute(
+                            """
+                            INSERT INTO peer_reviews 
+                            (week_id, pitch_id, reviewer_model, pitch_label, review_data, research_date, created_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                            """,
+                            (
+                                week_id,
+                                pitch_id,
+                                reviewer_model,
+                                pitch_label,
+                                json.dumps(review),
+                                research_date,
+                            ),
+                        )
+                    else:
+                        print(
+                            f"  ⚠️  Could not map pitch_label '{pitch_label}' to model for review"
+                        )
+
+                conn.commit()
+                print("✅ Peer reviews saved to DB")
+
+        finally:
+            conn.close()
+
+    except Exception as e:
+        print(f"❌ Error saving peer reviews to DB: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+
+def _save_chairman_decision_to_db(
+    week_id: str, chairman_decision: Dict[str, Any], research_date: str
+):
+    """Save chairman decision to database."""
+    import psycopg2
+
+    try:
+        db_name = os.getenv("DATABASE_NAME", "llm_trading")
+        db_user = os.getenv("DATABASE_USER", "luis")
+
+        conn = psycopg2.connect(dbname=db_name, user=db_user)
+
+        try:
+            with conn.cursor() as cur:
+                print(
+                    f"💾 Saving chairman decision to DB for research_date {research_date}"
+                )
+
+                # Delete existing decision for this research_date
+                cur.execute(
+                    "DELETE FROM chairman_decisions WHERE research_date = %s",
+                    (research_date,),
+                )
+
+                # Insert new decision
+                cur.execute(
+                    """
+                    INSERT INTO chairman_decisions 
+                    (week_id, decision_data, research_date, created_at)
+                    VALUES (%s, %s, %s, NOW())
+                    """,
+                    (week_id, json.dumps(chairman_decision), research_date),
+                )
+
+                conn.commit()
+                print("✅ Chairman decision saved to DB")
+
+        finally:
+            conn.close()
+
+    except Exception as e:
+        print(f"❌ Error saving chairman decision to DB: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+
+def _load_pitches_from_db(
+    week_id: str = None, research_date: str = None
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Load pitches from DB.
     Returns (formatted_pitches, raw_pitches).
     """
     import psycopg2
     from .pipeline.stages.pm_pitch import PM_PITCHES
-    
+
     formatted_pitches = []
     raw_pitches = []
 
@@ -1074,9 +1274,11 @@ def _load_pitches_from_db(week_id: str = None, research_date: str = None) -> tup
                 else:
                     # Get latest by research_date if available, else by week_id
                     # Prefer using research_date as it's more valid
-                    cur.execute("SELECT MAX(research_date) FROM pm_pitches WHERE research_date IS NOT NULL")
+                    cur.execute(
+                        "SELECT MAX(research_date) FROM pm_pitches WHERE research_date IS NOT NULL"
+                    )
                     latest_date = cur.fetchone()[0]
-                    
+
                     if latest_date:
                         query = """
                             SELECT pitch_data, created_at, research_date 
@@ -1096,18 +1298,18 @@ def _load_pitches_from_db(week_id: str = None, research_date: str = None) -> tup
 
                 cur.execute(query, params)
                 rows = cur.fetchall()
-                
+
                 if not rows:
                     return [], []
-                
+
                 # Extract raw pitches (first column is pitch_data)
                 raw_pitches = [row[0] for row in rows]
-                
+
                 # Format for frontend
                 # Create a temporary context to use the formatter
                 temp_context = PipelineContext().set(PM_PITCHES, raw_pitches)
                 formatted_pitches = _format_pitches_for_frontend(temp_context)
-                
+
                 print(f"📥 Loaded {len(raw_pitches)} pitches from DB")
                 return formatted_pitches, raw_pitches
 
@@ -1119,23 +1321,28 @@ def _load_pitches_from_db(week_id: str = None, research_date: str = None) -> tup
         return [], []
 
 
-
 @app.get("/api/pitches/current")
-async def get_current_pitches(week_id: Optional[str] = None, research_date: Optional[str] = None):
+async def get_current_pitches(
+    week_id: Optional[str] = None, research_date: Optional[str] = None
+):
     """Get current PM pitches."""
-    # Try to load from DB if not in memory OR if specific request
-    if not pipeline_state.pm_pitches or week_id or research_date:
+    # Always try to load from DB if specific request (week_id or research_date)
+    # OR if we don't have pitches in memory
+    if week_id or research_date or not pipeline_state.pm_pitches:
         pitches, raw_pitches = _load_pitches_from_db(week_id, research_date)
         if pitches:
             pipeline_state.pm_pitches = pitches
             pipeline_state.pm_pitches_raw = raw_pitches
+            print(
+                f"💾 Stored {len(raw_pitches)} raw pitches in pipeline_state.pm_pitches_raw"
+            )
 
     if pipeline_state.pm_pitches:
         print(f"📤 API returning {len(pipeline_state.pm_pitches)} pitches")
         if pipeline_state.pm_pitches:
-             print(
+            print(
                 f"   First pitch has execution_order: {'execution_order' in pipeline_state.pm_pitches[0]}"
-             )
+            )
         return pipeline_state.pm_pitches
     print("📤 API returning empty pitches")
     return []
@@ -1146,11 +1353,11 @@ async def generate_pitches(
     background_tasks: BackgroundTasks, request: GeneratePitchesRequest
 ):
     """Generate PM pitches from a specific research report."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"🎯 PM PITCH GENERATION REQUEST RECEIVED")
     print(f"   Research ID: {request.research_id}")
     print(f"   Model: {request.model if request.model else 'ALL'}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
     job_id = str(uuid.uuid4())
 
     # Determine target models
@@ -1189,7 +1396,7 @@ async def generate_pitches(
             print(f"   Models: {models_to_run}")
             print(f"   Research ID: {research_id}")
             print(f"   Single model: {is_single}\n")
-            
+
             # Only set global status if generating all models
             # Single model requests should not block others
             if not is_single:
@@ -1234,7 +1441,9 @@ async def generate_pitches(
                         "natural_language": row[4],
                         "structured_json": row[5],
                         "status": row[6],
-                        "created_at": row[7].isoformat() if row[7] else datetime.utcnow().isoformat(),
+                        "created_at": row[7].isoformat()
+                        if row[7]
+                        else datetime.utcnow().isoformat(),
                     }
 
             finally:
@@ -1284,37 +1493,49 @@ async def generate_pitches(
 
             # Format and store results
             new_pitches = _format_pitches_for_frontend(result_context)
-            
+
             # Filter output to only requested models (safety check) and merge
             new_pitches = [p for p in new_pitches if p["model"] in models_to_run]
-            
+
             # Merge with existing pitches (handle None case)
             if pipeline_state.pm_pitches is None:
                 pipeline_state.pm_pitches = []
-            existing_pitches = [p for p in pipeline_state.pm_pitches if p["model"] not in models_to_run]
+            existing_pitches = [
+                p for p in pipeline_state.pm_pitches if p["model"] not in models_to_run
+            ]
             pipeline_state.pm_pitches = existing_pitches + new_pitches
 
             # ALSO store raw pitches for council synthesis
             from .pipeline.stages.pm_pitch import PM_PITCHES
-            
+
             all_raw = result_context.get(PM_PITCHES, [])
             new_raw = [p for p in all_raw if p.get("model") in models_to_run]
-            
+
             # Handle None case for raw pitches
             if pipeline_state.pm_pitches_raw is None:
                 pipeline_state.pm_pitches_raw = []
-            existing_raw = [p for p in pipeline_state.pm_pitches_raw if p.get("model") not in models_to_run]
+            existing_raw = [
+                p
+                for p in pipeline_state.pm_pitches_raw
+                if p.get("model") not in models_to_run
+            ]
             pipeline_state.pm_pitches_raw = existing_raw + new_raw
 
             # VERIFY SAVE - Log what we're storing
             print(f"\n{'=' * 60}")
-            print(f"💾 SAVING {len(new_pitches)} OLD+NEW PITCHES TO pipeline_state.pm_pitches")
-            print(f"   (New: {len(new_pitches)}, Total: {len(pipeline_state.pm_pitches)})")
-            
+            print(
+                f"💾 SAVING {len(new_pitches)} OLD+NEW PITCHES TO pipeline_state.pm_pitches"
+            )
+            print(
+                f"   (New: {len(new_pitches)}, Total: {len(pipeline_state.pm_pitches)})"
+            )
+
             # PERSIST RESULTS TO DB
             # Only save the new ones, the DB helper deletes by model/week
             if new_raw and "week_id" in research_pack:
-                 _save_pitches_to_db(research_pack["week_id"], new_raw, research_pack.get("created_at"))
+                _save_pitches_to_db(
+                    research_pack["week_id"], new_raw, research_pack.get("created_at")
+                )
 
             # Mark all models complete
             for model in models_to_run:
@@ -1347,7 +1568,9 @@ async def generate_pitches(
                 pipeline_state.pm_status = "error"
 
     print(f"✅ Job {job_id} queued for background processing")
-    background_tasks.add_task(run_pitches, job_id, request.research_id, target_models, is_single_model)
+    background_tasks.add_task(
+        run_pitches, job_id, request.research_id, target_models, is_single_model
+    )
     return {
         "status": "generating",
         "job_id": job_id,
@@ -1524,11 +1747,50 @@ async def synthesize_council(background_tasks: BackgroundTasks):
             pipeline_state.council_status = "synthesizing"
 
             # Check if we have raw PM pitches for peer review
+            # If not in memory, try loading from DB
+            if not pipeline_state.pm_pitches_raw:
+                print("⚠️  No raw PM pitches in memory - attempting to load from DB...")
+                pitches, raw_pitches = _load_pitches_from_db()
+                if raw_pitches:
+                    pipeline_state.pm_pitches = pitches
+                    pipeline_state.pm_pitches_raw = raw_pitches
+                    print(f"✅ Loaded {len(raw_pitches)} raw pitches from DB")
+                else:
+                    print("❌ No raw PM pitches found in DB - cannot run council")
+                    print("   Please generate PM pitches first")
+                    pipeline_state.council_status = "error"
+                    return
+
             if not pipeline_state.pm_pitches_raw:
                 print("❌ No raw PM pitches found - cannot run council")
                 print("   Please generate PM pitches first")
                 pipeline_state.council_status = "error"
                 return
+
+            # region agent log
+            try:
+                import json, time
+
+                with open("/research/llm_trading/.cursor/debug.log", "a") as f:
+                    f.write(
+                        json.dumps(
+                            {
+                                "sessionId": "debug-session",
+                                "runId": "pre-fix",
+                                "hypothesisId": "H1",
+                                "location": "main.py:run_council:start",
+                                "message": "Council start with raw pitches",
+                                "data": {
+                                    "raw_count": len(pipeline_state.pm_pitches_raw)
+                                },
+                                "timestamp": int(time.time() * 1000),
+                            }
+                        )
+                        + "\n"
+                    )
+            except Exception:
+                pass
+            # endregion
 
             print("\n" + "=" * 60)
             print("🏛️  COUNCIL SYNTHESIS (PEER REVIEW → CHAIRMAN)")
@@ -1554,6 +1816,69 @@ async def synthesize_council(background_tasks: BackgroundTasks):
             )
             pipeline_state.pending_trades = _format_trades_for_frontend(result_context)
             pipeline_state.council_status = "complete"
+
+            # Extract research_date and week_id from PM pitches
+            # All pitches for the same research should have the same research_date
+            research_date = None
+            week_id = None
+
+            if pipeline_state.pm_pitches_raw:
+                first_pitch = pipeline_state.pm_pitches_raw[0]
+                week_id = first_pitch.get("week_id")
+
+                # Try to get research_date from database (pitches are saved with research_date)
+                import psycopg2
+
+                db_name = os.getenv("DATABASE_NAME", "llm_trading")
+                db_user = os.getenv("DATABASE_USER", "luis")
+                try:
+                    conn = psycopg2.connect(dbname=db_name, user=db_user)
+                    with conn.cursor() as cur:
+                        # Get research_date from any pitch for this week (they should all be the same)
+                        cur.execute(
+                            """
+                            SELECT research_date FROM pm_pitches 
+                            WHERE week_id = %s AND research_date IS NOT NULL
+                            ORDER BY created_at DESC LIMIT 1
+                            """,
+                            (week_id,),
+                        )
+                        row = cur.fetchone()
+                        if row and row[0]:
+                            research_date = row[0]
+                    conn.close()
+                except Exception as e:
+                    print(f"  ⚠️  Could not fetch research_date from DB: {e}")
+                    import traceback
+
+                    traceback.print_exc()
+
+            # Save peer reviews and chairman decision to database
+            if research_date and week_id:
+                from .pipeline.stages.peer_review import PEER_REVIEWS, LABEL_TO_MODEL
+                from .pipeline.stages.chairman import CHAIRMAN_DECISION
+
+                peer_reviews = result_context.get(PEER_REVIEWS, [])
+                chairman_decision = result_context.get(CHAIRMAN_DECISION)
+                label_to_model = result_context.get(LABEL_TO_MODEL, {})
+
+                print(
+                    f"📊 Council data to save: {len(peer_reviews)} peer reviews, chairman_decision={'yes' if chairman_decision else 'no'}"
+                )
+
+                if peer_reviews:
+                    _save_peer_reviews_to_db(
+                        week_id,
+                        peer_reviews,
+                        research_date,
+                        pipeline_state.pm_pitches_raw,
+                        label_to_model,
+                    )
+
+                if chairman_decision:
+                    _save_chairman_decision_to_db(
+                        week_id, chairman_decision, research_date
+                    )
 
             print("✅ Council synthesis complete!")
 
@@ -1584,26 +1909,108 @@ async def get_pending_trades():
 
 @app.post("/api/trades/execute")
 async def execute_trades(request: ExecuteTradesRequest):
-    """Execute approved trades."""
-
+    """Execute trades using bracket orders."""
+    
     try:
-        # In a real implementation, this would call the ExecutionStage
-        # For now, mark trades as executed
-        trade_ids = request.trade_ids
-        if trade_ids:
-            for trade in pipeline_state.pending_trades:
-                if trade["id"] in trade_ids:
-                    trade["status"] = "filled"
-                    pipeline_state.executed_trades.append(trade)
-            pipeline_state.pending_trades = [
-                t for t in pipeline_state.pending_trades if t["status"] == "pending"
-            ]
-
+        manager = MultiAlpacaManager()
+        
+        results = []
+        
+        if not request.trade_ids:
+            return {
+                "status": "success",
+                "message": "No trades to execute",
+                "results": []
+            }
+        
+        for trade_id in request.trade_ids:
+            # Find pitch from database
+            pitch = await _find_pitch_by_id(trade_id)
+            
+            if not pitch:
+                results.append({
+                    "trade_id": trade_id,
+                    "status": "error",
+                    "message": "Pitch not found in database"
+                })
+                continue
+            
+            # Skip FLAT positions
+            if pitch.get("direction") == "FLAT":
+                results.append({
+                    "trade_id": trade_id,
+                    "status": "skipped",
+                    "message": "FLAT position - no trade executed"
+                })
+                continue
+            
+            # Get account name from pitch
+            account_name = pitch.get("account", "COUNCIL")
+            
+            # Get Alpaca client for this account
+            alpaca_account = manager.alpaca_clients.get(account_name)
+            
+            if not alpaca_account:
+                results.append({
+                    "trade_id": trade_id,
+                    "status": "error",
+                    "message": f"Account {account_name} not initialized or missing credentials"
+                })
+                continue
+            
+            try:
+                # Create bracket order
+                order_result = create_bracket_order_from_pitch(
+                    alpaca_account.client,
+                    pitch
+                )
+                
+                if order_result:
+                    results.append({
+                        "trade_id": trade_id,
+                        "status": "submitted",
+                        "order_id": order_result.get("order_id"),
+                        "symbol": order_result.get("symbol"),
+                        "side": order_result.get("side"),
+                        "qty": order_result.get("qty"),
+                        "limit_price": order_result.get("limit_price"),
+                        "take_profit_price": order_result.get("take_profit_price"),
+                        "stop_loss_price": order_result.get("stop_loss_price"),
+                        "message": f"Bracket order submitted for {account_name}"
+                    })
+                    
+                    # Update pipeline state
+                    for trade in pipeline_state.pending_trades:
+                        if trade.get("id") == trade_id:
+                            trade["status"] = "filled"
+                            trade["order_id"] = order_result.get("order_id")
+                            pipeline_state.executed_trades.append(trade)
+                            break
+                else:
+                    results.append({
+                        "trade_id": trade_id,
+                        "status": "error",
+                        "message": "Failed to create bracket order"
+                    })
+            
+            except Exception as e:
+                results.append({
+                    "trade_id": trade_id,
+                    "status": "error",
+                    "message": f"Order submission failed: {str(e)}"
+                })
+        
+        # Clean up pending trades
+        pipeline_state.pending_trades = [
+            t for t in pipeline_state.pending_trades if t.get("status") == "pending"
+        ]
+        
         return {
             "status": "success",
-            "message": f"Executed {len(trade_ids) if trade_ids else 0} trades",
+            "message": f"Processed {len(request.trade_ids)} trade(s)",
+            "results": results
         }
-
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
