@@ -11,14 +11,20 @@ import asyncio
 from datetime import datetime
 import time
 
+# Authentication
+from backend.auth import APIKeyMiddleware
+
 # Alpaca integration
-from .alpaca_integration import MultiAlpacaManager
+from .multi_alpaca_client import MultiAlpacaManager
 from .alpaca_integration.orders import create_bracket_order_from_pitch
 import os
 from pathlib import Path
 
 # Legacy imports
-from . import storage
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent))
+import conversation_storage as storage
 from .council import (
     run_full_council,
     generate_conversation_title,
@@ -75,6 +81,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add API key authentication middleware
+app.add_middleware(APIKeyMiddleware)
 
 # ============================================================================
 # STATE MANAGEMENT
@@ -380,45 +389,46 @@ def _fetch_current_prices_sync():
 async def _find_pitch_by_id(pitch_id: int) -> Optional[Dict[str, Any]]:
     """Retrieve PM pitch from database by ID."""
     import psycopg2
-    
+
     try:
         db_name = os.getenv("DATABASE_NAME", "llm_trading")
         db_user = os.getenv("DATABASE_USER", "luis")
-        
+
         conn = psycopg2.connect(dbname=db_name, user=db_user)
-        
+
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT * FROM pm_pitches WHERE id = %s",
-                    (pitch_id,)
-                )
+                cur.execute("SELECT * FROM pm_pitches WHERE id = %s", (pitch_id,))
                 result = cur.fetchone()
-                
+
                 if result:
                     # Convert to dict
                     columns = [desc[0] for desc in cur.description]
                     pitch_dict = dict(zip(columns, result))
-                    
+
                     # Parse JSON fields
-                    if pitch_dict.get('entry_policy'):
+                    if pitch_dict.get("entry_policy"):
                         try:
-                            pitch_dict['entry_policy'] = json.loads(pitch_dict['entry_policy'])
+                            pitch_dict["entry_policy"] = json.loads(
+                                pitch_dict["entry_policy"]
+                            )
                         except (json.JSONDecodeError, TypeError):
                             pass
-                    
-                    if pitch_dict.get('exit_policy'):
+
+                    if pitch_dict.get("exit_policy"):
                         try:
-                            pitch_dict['exit_policy'] = json.loads(pitch_dict['exit_policy'])
+                            pitch_dict["exit_policy"] = json.loads(
+                                pitch_dict["exit_policy"]
+                            )
                         except (json.JSONDecodeError, TypeError):
                             pass
-                    
+
                     return pitch_dict
                 return None
-        
+
         finally:
             conn.close()
-    
+
     except Exception as e:
         print(f"Error fetching pitch {pitch_id}: {e}")
         return None
@@ -1910,75 +1920,82 @@ async def get_pending_trades():
 @app.post("/api/trades/execute")
 async def execute_trades(request: ExecuteTradesRequest):
     """Execute trades using bracket orders."""
-    
+
     try:
         manager = MultiAlpacaManager()
-        
+
         results = []
-        
+
         if not request.trade_ids:
             return {
                 "status": "success",
                 "message": "No trades to execute",
-                "results": []
+                "results": [],
             }
-        
+
         for trade_id in request.trade_ids:
             # Find pitch from database
             pitch = await _find_pitch_by_id(trade_id)
-            
+
             if not pitch:
-                results.append({
-                    "trade_id": trade_id,
-                    "status": "error",
-                    "message": "Pitch not found in database"
-                })
+                results.append(
+                    {
+                        "trade_id": trade_id,
+                        "status": "error",
+                        "message": "Pitch not found in database",
+                    }
+                )
                 continue
-            
+
             # Skip FLAT positions
             if pitch.get("direction") == "FLAT":
-                results.append({
-                    "trade_id": trade_id,
-                    "status": "skipped",
-                    "message": "FLAT position - no trade executed"
-                })
+                results.append(
+                    {
+                        "trade_id": trade_id,
+                        "status": "skipped",
+                        "message": "FLAT position - no trade executed",
+                    }
+                )
                 continue
-            
+
             # Get account name from pitch
             account_name = pitch.get("account", "COUNCIL")
-            
+
             # Get Alpaca client for this account
             alpaca_account = manager.alpaca_clients.get(account_name)
-            
+
             if not alpaca_account:
-                results.append({
-                    "trade_id": trade_id,
-                    "status": "error",
-                    "message": f"Account {account_name} not initialized or missing credentials"
-                })
+                results.append(
+                    {
+                        "trade_id": trade_id,
+                        "status": "error",
+                        "message": f"Account {account_name} not initialized or missing credentials",
+                    }
+                )
                 continue
-            
+
             try:
                 # Create bracket order
                 order_result = create_bracket_order_from_pitch(
-                    alpaca_account.client,
-                    pitch
+                    alpaca_account.client, pitch
                 )
-                
+
                 if order_result:
-                    results.append({
-                        "trade_id": trade_id,
-                        "status": "submitted",
-                        "order_id": order_result.get("order_id"),
-                        "symbol": order_result.get("symbol"),
-                        "side": order_result.get("side"),
-                        "qty": order_result.get("qty"),
-                        "limit_price": order_result.get("limit_price"),
-                        "take_profit_price": order_result.get("take_profit_price"),
-                        "stop_loss_price": order_result.get("stop_loss_price"),
-                        "message": f"Bracket order submitted for {account_name}"
-                    })
-                    
+                    results.append(
+                        {
+                            "trade_id": trade_id,
+                            "status": "submitted",
+                            "order_id": order_result.get("order_id"),
+                            "symbol": order_result.get("symbol"),
+                            "side": order_result.get("side"),
+                            "qty": order_result.get("qty"),
+                            "limit_price": order_result.get("limit_price"),
+                            "take_profit_price": order_result.get("take_profit_price"),
+                            "stop_loss_price": order_result.get("stop_loss_price"),
+                            "message": f"Bracket order submitted for {account_name}",
+                        }
+                    )
+
                     # Update pipeline state
                     for trade in pipeline_state.pending_trades:
                         if trade.get("id") == trade_id:
@@ -1987,30 +2004,34 @@ async def execute_trades(request: ExecuteTradesRequest):
                             pipeline_state.executed_trades.append(trade)
                             break
                 else:
-                    results.append({
+                    results.append(
+                        {
+                            "trade_id": trade_id,
+                            "status": "error",
+                            "message": "Failed to create bracket order",
+                        }
+                    )
+
+            except Exception as e:
+                results.append(
+                    {
                         "trade_id": trade_id,
                         "status": "error",
-                        "message": "Failed to create bracket order"
-                    })
-            
-            except Exception as e:
-                results.append({
-                    "trade_id": trade_id,
-                    "status": "error",
-                    "message": f"Order submission failed: {str(e)}"
-                })
-        
+                        "message": f"Order submission failed: {str(e)}",
+                    }
+                )
+
         # Clean up pending trades
         pipeline_state.pending_trades = [
             t for t in pipeline_state.pending_trades if t.get("status") == "pending"
         ]
-        
+
         return {
             "status": "success",
             "message": f"Processed {len(request.trade_ids)} trade(s)",
-            "results": results
+            "results": results,
         }
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
