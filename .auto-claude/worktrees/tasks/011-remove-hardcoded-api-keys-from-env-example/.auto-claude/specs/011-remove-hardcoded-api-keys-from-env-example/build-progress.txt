@@ -1,0 +1,54 @@
+# Build Progress: Remove Hardcoded API Keys from .env.example
+
+## Phase 1: Security Audit and Credential Replacement
+
+### Subtask 1.1: Audit .env.example for hardcoded credentials - COMPLETED
+
+**Audit Results:**
+
+Found 5 sets of hardcoded credentials that need replacement:
+
+1. ALPACA_GEMINI_KEY_ID and ALPACA_GEMINI_SECRET_KEY (Lines 18-19)
+   - Key ID: PKWOJXNROZ3RAKSWACCTHOWHC5
+   - Secret: 4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi
+   - Status: HARDCODED - NEEDS REPLACEMENT
+
+2. ALPACA_COUNCIL_KEY_ID and ALPACA_COUNCIL_SECRET_KEY (Lines 21-22)
+   - Key ID: PKWOJXNROZ3RAKSWACCTHOWHC5
+   - Secret: 4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi
+   - Status: HARDCODED - NEEDS REPLACEMENT
+   - NOTE: Same credentials as ALPACA_GEMINI
+
+3. ALPACA_CLAUDE_KEY_ID and ALPACA_CLAUDE_SECRET_KEY (Lines 24-25)
+   - Key ID: PKWOJXNROZ3RAKSWACCTHOWHC5
+   - Secret: 4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi
+   - Status: HARDCODED - NEEDS REPLACEMENT
+   - NOTE: Same credentials as ALPACA_GEMINI and ALPACA_COUNCIL
+
+4. ALPACA_PERSONAL_KEY_ID and ALPACA_PERSONAL_SECRET_KEY (Lines 40-41)
+   - Key ID: PKVJIVHQUMBDQLK2NHE63VSRYV
+   - Secret: AKqFaFv7MHGWdiivPLS6Lmr95HNhmk7jcFNKMJdPz2HA
+   - Status: HARDCODED - NEEDS REPLACEMENT
+   - CRITICAL: This account has market data access
+
+5. GEMINI_API_KEY (Line 47)
+   - API Key: AIzaSyC7oAt9AuPWdbfRqjnDyVuYKodiK1JPArI
+   - Status: HARDCODED - NEEDS REPLACEMENT
+
+**Already Using Placeholders (Good):**
+- ALPACA_CHATGPT credentials (Lines 15-16) - OK
+- ALPACA_GROQ credentials (Lines 27-28) - OK
+- ALPACA_DEEPSEEK credentials (Lines 30-31) - OK
+- PERPLEXITY_API_KEY (Line 46) - OK
+
+**Security Concerns:**
+1. Three trading accounts (GEMINI, COUNCIL, CLAUDE) are using identical Alpaca credentials
+2. All credentials have been committed to git history and should be rotated immediately
+3. The personal account credentials are particularly sensitive as they have market data API access
+
+**Next Steps:**
+- Replace all 5 sets of hardcoded credentials with placeholder text
+- Follow the pattern already established: your_key_here, your_secret_here
+- Recommend immediate credential rotation for exposed API keys
+
+---
