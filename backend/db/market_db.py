@@ -1,29 +1,34 @@
 """Market data database operations."""
 
-from typing import Dict, Any, List, Optional
-from .database import get_connection
+import logging
+from typing import Dict, List, Optional, Any
+
+from backend.db.database import DatabaseConnection
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_market_metrics() -> Optional[Dict[str, Any]]:
     """
     Fetch market metrics including 7-day returns and correlation matrix.
 
+    Retrieves the latest 7-day log returns and correlation matrix from the database.
+    Returns formatted market metrics suitable for analysis and display.
+
     Returns:
-        Dictionary containing:
-            - date: Latest date for the data
-            - returns_7d: List of symbols with 7-day log returns
-            - correlation_matrix: Nested dict of symbol correlations
-            - symbols: Sorted list of all symbols
-        Returns None if error occurs.
+        Dict containing:
+            - date: Latest date of the data (ISO format)
+            - returns_7d: List of dicts with symbol, log_return_7d, pct_return
+            - correlation_matrix: Nested dict of symbol-to-symbol correlations
+            - symbols: Sorted list of symbols in the correlation matrix
+        Returns None if an error occurs.
 
     Database Tables:
-        - rolling_7day_log_returns: Contains 7-day log returns per symbol/date
-        - correlation_matrix: Contains pairwise correlations per date
+        - rolling_7day_log_returns: Contains 7-day rolling log returns by symbol/date
+        - correlation_matrix: Contains pairwise correlations by symbol/date
     """
     try:
-        conn = get_connection()
-
-        try:
+        with DatabaseConnection() as conn:
             with conn.cursor() as cur:
                 # Get latest 7-day returns
                 cur.execute("""
@@ -74,34 +79,32 @@ def fetch_market_metrics() -> Optional[Dict[str, Any]]:
                     "symbols": symbols,
                 }
 
-        finally:
-            conn.close()
-
     except Exception as e:
-        print(f"Error fetching market metrics: {e}")
+        logger.error(f"Error fetching market metrics: {e}")
         return None
 
 
 def fetch_current_prices() -> Optional[Dict[str, Any]]:
     """
-    Fetch current prices and volumes for all tradable instruments.
+    Fetch current prices for all tracked instruments.
+
+    Retrieves the latest daily bar data (OHLCV) for each symbol from the database.
+    Returns the most recent trading day's data for each instrument.
 
     Returns:
-        Dictionary containing:
-            - prices: List of price data per symbol (OHLCV)
-            - asof_date: Date of the price data
-        Returns None if error occurs.
+        Dict containing:
+            - prices: List of dicts with symbol, date, open, high, low, close, volume
+            - asof_date: The date of the price data (ISO format)
+        Returns None if an error occurs.
 
     Database Tables:
-        - daily_bars: Contains OHLCV data per symbol/date
+        - daily_bars: Contains OHLCV data by symbol/date
 
-    Tradable Instruments:
+    Tracked Symbols:
         SPY, QQQ, IWM, TLT, HYG, UUP, GLD, USO, VIXY, SH
     """
     try:
-        conn = get_connection()
-
-        try:
+        with DatabaseConnection() as conn:
             with conn.cursor() as cur:
                 # Get latest daily bars for all instruments
                 cur.execute("""
@@ -145,9 +148,6 @@ def fetch_current_prices() -> Optional[Dict[str, Any]]:
                     "asof_date": prices[0]["date"] if prices else None,
                 }
 
-        finally:
-            conn.close()
-
     except Exception as e:
-        print(f"Error fetching current prices: {e}")
+        logger.error(f"Error fetching current prices: {e}")
         return None
