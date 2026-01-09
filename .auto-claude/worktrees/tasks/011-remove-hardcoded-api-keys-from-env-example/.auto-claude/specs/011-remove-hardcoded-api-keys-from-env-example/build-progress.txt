@@ -1,54 +1,69 @@
-# Build Progress: Remove Hardcoded API Keys from .env.example
+=== Build Progress: Remove Hardcoded API Keys from .env.example ===
+
+Date: 2026-01-09
+Task: Security audit and credential replacement
+
+---
 
 ## Phase 1: Security Audit and Credential Replacement
 
-### Subtask 1.1: Audit .env.example for hardcoded credentials - COMPLETED
+### [COMPLETED] Subtask 1.1: Audit .env.example for hardcoded credentials
 
-**Audit Results:**
+**Status:** ✅ COMPLETED
 
-Found 5 sets of hardcoded credentials that need replacement:
+**Summary:**
+Conducted a comprehensive audit of the .env.example file located at /research/llm_trading/.env.example
+and identified all hardcoded API keys and credentials that need to be replaced with placeholder text.
 
-1. ALPACA_GEMINI_KEY_ID and ALPACA_GEMINI_SECRET_KEY (Lines 18-19)
-   - Key ID: PKWOJXNROZ3RAKSWACCTHOWHC5
-   - Secret: 4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi
-   - Status: HARDCODED - NEEDS REPLACEMENT
+**Findings:**
 
-2. ALPACA_COUNCIL_KEY_ID and ALPACA_COUNCIL_SECRET_KEY (Lines 21-22)
-   - Key ID: PKWOJXNROZ3RAKSWACCTHOWHC5
-   - Secret: 4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi
-   - Status: HARDCODED - NEEDS REPLACEMENT
-   - NOTE: Same credentials as ALPACA_GEMINI
+1. **ALPACA_GEMINI Account (Lines 18-19)** ⚠️ HARDCODED
+   - ALPACA_GEMINI_KEY_ID=PKWOJXNROZ3RAKSWACCTHOWHC5
+   - ALPACA_GEMINI_SECRET_KEY=4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi
+   - ACTION: Replace with placeholder values
 
-3. ALPACA_CLAUDE_KEY_ID and ALPACA_CLAUDE_SECRET_KEY (Lines 24-25)
-   - Key ID: PKWOJXNROZ3RAKSWACCTHOWHC5
-   - Secret: 4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi
-   - Status: HARDCODED - NEEDS REPLACEMENT
-   - NOTE: Same credentials as ALPACA_GEMINI and ALPACA_COUNCIL
+2. **ALPACA_COUNCIL Account (Lines 21-22)** ⚠️ HARDCODED
+   - ALPACA_COUNCIL_KEY_ID=PKWOJXNROZ3RAKSWACCTHOWHC5
+   - ALPACA_COUNCIL_SECRET_KEY=4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi
+   - NOTE: Uses same credentials as GEMINI account
+   - ACTION: Replace with placeholder values
 
-4. ALPACA_PERSONAL_KEY_ID and ALPACA_PERSONAL_SECRET_KEY (Lines 40-41)
-   - Key ID: PKVJIVHQUMBDQLK2NHE63VSRYV
-   - Secret: AKqFaFv7MHGWdiivPLS6Lmr95HNhmk7jcFNKMJdPz2HA
-   - Status: HARDCODED - NEEDS REPLACEMENT
-   - CRITICAL: This account has market data access
+3. **ALPACA_CLAUDE Account (Lines 24-25)** ⚠️ HARDCODED
+   - ALPACA_CLAUDE_KEY_ID=PKWOJXNROZ3RAKSWACCTHOWHC5
+   - ALPACA_CLAUDE_SECRET_KEY=4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi
+   - NOTE: Uses same credentials as GEMINI account
+   - ACTION: Replace with placeholder values
 
-5. GEMINI_API_KEY (Line 47)
-   - API Key: AIzaSyC7oAt9AuPWdbfRqjnDyVuYKodiK1JPArI
-   - Status: HARDCODED - NEEDS REPLACEMENT
+4. **ALPACA_PERSONAL Account (Lines 40-41)** ⚠️ HARDCODED
+   - ALPACA_PERSONAL_KEY_ID=PKVJIVHQUMBDQLK2NHE63VSRYV
+   - ALPACA_PERSONAL_SECRET_KEY=AKqFaFv7MHGWdiivPLS6Lmr95HNhmk7jcFNKMJdPz2HA
+   - NOTE: Different credentials from trading accounts
+   - ACTION: Replace with placeholder values
 
-**Already Using Placeholders (Good):**
-- ALPACA_CHATGPT credentials (Lines 15-16) - OK
-- ALPACA_GROQ credentials (Lines 27-28) - OK
-- ALPACA_DEEPSEEK credentials (Lines 30-31) - OK
-- PERPLEXITY_API_KEY (Line 46) - OK
+5. **GEMINI_API_KEY (Line 47)** ⚠️ HARDCODED
+   - GEMINI_API_KEY=AIzaSyC7oAt9AuPWdbfRqjnDyVuYKodiK1JPArI
+   - NOTE: Google Gemini API key
+   - ACTION: Replace with placeholder value
 
-**Security Concerns:**
-1. Three trading accounts (GEMINI, COUNCIL, CLAUDE) are using identical Alpaca credentials
-2. All credentials have been committed to git history and should be rotated immediately
-3. The personal account credentials are particularly sensitive as they have market data API access
+**Already Properly Configured (No Action Required):** ✅
+- ALPACA_CHATGPT credentials (Lines 15-16): Already use placeholder "your_key_here" / "your_secret_here"
+- ALPACA_GROQ credentials (Lines 27-28): Already use placeholder values
+- ALPACA_DEEPSEEK credentials (Lines 30-31): Already use placeholder values
+- PERPLEXITY_API_KEY (Line 46): Already uses placeholder "your_perplexity_api_key_here"
+
+**Security Notes:**
+- Total of 5 sets of hardcoded credentials identified
+- 3 Alpaca trading accounts share the same credentials (GEMINI, COUNCIL, CLAUDE)
+- 1 Alpaca personal account with different credentials (for market data access)
+- 1 Google Gemini API key
+- These credentials should be rotated immediately as they may have been exposed in git history
+- This addresses CWE-798 (Use of Hard-coded Credentials)
 
 **Next Steps:**
-- Replace all 5 sets of hardcoded credentials with placeholder text
-- Follow the pattern already established: your_key_here, your_secret_here
-- Recommend immediate credential rotation for exposed API keys
+- Subtask 1.2: Replace ALPACA_GEMINI credentials
+- Subtask 1.3: Replace ALPACA_COUNCIL credentials
+- Subtask 1.4: Replace ALPACA_CLAUDE credentials
+- Subtask 1.5: Replace ALPACA_PERSONAL credentials
+- Subtask 1.6: Replace GEMINI_API_KEY
 
 ---
