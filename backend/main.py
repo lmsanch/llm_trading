@@ -1,6 +1,6 @@
 """FastAPI backend for LLM Council and Trading Dashboard."""
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -12,7 +12,7 @@ from datetime import datetime
 import time
 
 # Authentication
-from backend.auth import APIKeyMiddleware
+from backend.auth import APIKeyMiddleware, get_api_key
 
 # Alpaca integration
 from .multi_alpaca_client import MultiAlpacaManager
@@ -759,6 +759,7 @@ async def get_market_snapshot():
 async def generate_research(
     background_tasks: BackgroundTasks,
     request: GenerateResearchRequest = GenerateResearchRequest(),
+    api_key: str = Depends(get_api_key),
 ):
     """Generate new research packs."""
     job_id = str(uuid.uuid4())
@@ -945,7 +946,7 @@ async def get_research_results(job_id: str):
 
 
 @app.post("/api/research/verify")
-async def verify_research(data: Dict[str, Any]):
+async def verify_research(data: Dict[str, Any], api_key: str = Depends(get_api_key)):
     """Mark research as verified by human."""
     research_id = data.get("id", "current")
     pipeline_state.research_status = "verified"
@@ -1360,7 +1361,9 @@ async def get_current_pitches(
 
 @app.post("/api/pitches/generate")
 async def generate_pitches(
-    background_tasks: BackgroundTasks, request: GeneratePitchesRequest
+    background_tasks: BackgroundTasks,
+    request: GeneratePitchesRequest,
+    api_key: str = Depends(get_api_key),
 ):
     """Generate PM pitches from a specific research report."""
     print(f"\n{'=' * 60}")
@@ -1597,7 +1600,7 @@ async def get_pitches_status(job_id: str):
 
 
 @app.post("/api/pitches/{id}/approve")
-async def approve_pitch(id: int):
+async def approve_pitch(id: int, api_key: str = Depends(get_api_key)):
     """Approve a PM pitch."""
     return {"status": "success", "message": f"Pitch {id} approved"}
 
@@ -1749,7 +1752,9 @@ async def get_council_decision():
 
 
 @app.post("/api/council/synthesize")
-async def synthesize_council(background_tasks: BackgroundTasks):
+async def synthesize_council(
+    background_tasks: BackgroundTasks, api_key: str = Depends(get_api_key)
+):
     """Run council synthesis from existing PM pitches (peer review + chairman)."""
 
     async def run_council():
@@ -1918,7 +1923,9 @@ async def get_pending_trades():
 
 
 @app.post("/api/trades/execute")
-async def execute_trades(request: ExecuteTradesRequest):
+async def execute_trades(
+    request: ExecuteTradesRequest, api_key: str = Depends(get_api_key)
+):
     """Execute trades using bracket orders."""
 
     try:
@@ -2119,7 +2126,7 @@ async def list_conversations():
 
 
 @app.post("/api/conversations", response_model=Dict)
-async def create_conversation(request: Dict):
+async def create_conversation(request: Dict, api_key: str = Depends(get_api_key)):
     """Create a new conversation."""
     conversation_id = str(uuid.uuid4())
     conversation = storage.create_conversation(conversation_id)
@@ -2136,7 +2143,9 @@ async def get_conversation(conversation_id: str):
 
 
 @app.post("/api/conversations/{conversation_id}/message")
-async def send_message(conversation_id: str, request: Dict):
+async def send_message(
+    conversation_id: str, request: Dict, api_key: str = Depends(get_api_key)
+):
     """
     Send a message and run the 3-stage council process.
     Returns the complete response with all stages.
@@ -2177,7 +2186,9 @@ async def send_message(conversation_id: str, request: Dict):
 
 
 @app.post("/api/conversations/{conversation_id}/message/stream")
-async def send_message_stream(conversation_id: str, request: Dict):
+async def send_message_stream(
+    conversation_id: str, request: Dict, api_key: str = Depends(get_api_key)
+):
     """
     Send a message and stream the 3-stage council process.
     Returns Server-Sent Events as each stage completes.
