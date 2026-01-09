@@ -659,7 +659,7 @@ async def get_current_research():
 
 
 @app.get("/api/research/latest")
-async def get_latest_research():
+async def get_latest_research(api_key: str = Depends(get_api_key)):
     """Get the latest research report from database."""
     import psycopg2
 
@@ -1334,7 +1334,9 @@ def _load_pitches_from_db(
 
 @app.get("/api/pitches/current")
 async def get_current_pitches(
-    week_id: Optional[str] = None, research_date: Optional[str] = None
+    week_id: Optional[str] = None,
+    research_date: Optional[str] = None,
+    api_key: str = Depends(get_api_key),
 ):
     """Get current PM pitches."""
     # Always try to load from DB if specific request (week_id or research_date)
@@ -1915,7 +1917,7 @@ async def synthesize_council(
 
 
 @app.get("/api/trades/pending")
-async def get_pending_trades():
+async def get_pending_trades(api_key: str = Depends(get_api_key)):
     """Get pending trades."""
     if pipeline_state.pending_trades:
         return pipeline_state.pending_trades
@@ -2047,7 +2049,7 @@ async def execute_trades(
 
 
 @app.get("/api/positions")
-async def get_positions():
+async def get_positions(api_key: str = Depends(get_api_key)):
     """Get current positions across all accounts."""
     try:
         manager = MultiAlpacaManager()
@@ -2089,7 +2091,7 @@ async def get_positions():
 
 
 @app.get("/api/accounts")
-async def get_accounts():
+async def get_accounts(api_key: str = Depends(get_api_key)):
     """Get account summaries."""
     try:
         manager = MultiAlpacaManager()
@@ -2134,7 +2136,7 @@ async def create_conversation(request: Dict, api_key: str = Depends(get_api_key)
 
 
 @app.get("/api/conversations/{conversation_id}", response_model=Dict)
-async def get_conversation(conversation_id: str):
+async def get_conversation(conversation_id: str, api_key: str = Depends(get_api_key)):
     """Get a specific conversation with all its messages."""
     conversation = storage.get_conversation(conversation_id)
     if conversation is None:
