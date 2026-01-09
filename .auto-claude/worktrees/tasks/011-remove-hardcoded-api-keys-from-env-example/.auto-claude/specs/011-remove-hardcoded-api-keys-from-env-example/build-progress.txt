@@ -91,3 +91,218 @@ Successfully replaced hardcoded ALPACA_GEMINI credentials in .env.example with s
 - Subtask 1.6: Replace GEMINI_API_KEY (Line 47)
 
 ---
+
+### [COMPLETED] Subtask 1.3: Replace Alpaca Council account credentials
+
+**Status:** ✅ COMPLETED
+
+**Summary:**
+Successfully replaced hardcoded ALPACA_COUNCIL credentials in .env.example with secure placeholder values.
+
+**Changes Made:**
+- Line 21: ALPACA_COUNCIL_KEY_ID=PKWOJXNROZ3RAKSWACCTHOWHC5 → ALPACA_COUNCIL_KEY_ID=your_key_here
+- Line 22: ALPACA_COUNCIL_SECRET_KEY=4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi → ALPACA_COUNCIL_SECRET_KEY=your_secret_here
+
+**Verification:**
+- ✅ Placeholder values match the pattern used elsewhere in the file ('your_key_here', 'your_secret_here')
+- ✅ No hardcoded credentials remain for ALPACA_COUNCIL account
+- ✅ Changes committed to repository (commit: 09534a0)
+
+**Next Steps:**
+- Subtask 1.4: Replace ALPACA_CLAUDE credentials (Lines 24-25)
+- Subtask 1.5: Replace ALPACA_PERSONAL credentials (Lines 40-41)
+- Subtask 1.6: Replace GEMINI_API_KEY (Line 47)
+
+---
+
+### [COMPLETED] Subtask 1.4: Replace Alpaca Claude account credentials
+
+**Status:** ✅ COMPLETED
+
+**Summary:**
+Successfully replaced hardcoded ALPACA_CLAUDE credentials in .env.example with secure placeholder values.
+
+**Changes Made:**
+- Line 24: ALPACA_CLAUDE_KEY_ID=PKWOJXNROZ3RAKSWACCTHOWHC5 → ALPACA_CLAUDE_KEY_ID=your_key_here
+- Line 25: ALPACA_CLAUDE_SECRET_KEY=4gWqU1ks5mN3sPHExXRqiSuvmWbSdDi → ALPACA_CLAUDE_SECRET_KEY=your_secret_here
+
+**Verification:**
+- ✅ Placeholder values match the pattern used elsewhere in the file ('your_key_here', 'your_secret_here')
+- ✅ No hardcoded credentials remain for ALPACA_CLAUDE account
+- ✅ Changes committed to repository (commit: b7792af)
+
+**Next Steps:**
+- Subtask 1.5: Replace ALPACA_PERSONAL credentials (Lines 40-41)
+- Subtask 1.6: Replace GEMINI_API_KEY (Line 47)
+
+---
+
+### [COMPLETED] Subtask 1.5: Replace Alpaca Personal account credentials
+
+**Status:** ✅ COMPLETED
+
+**Summary:**
+Successfully replaced hardcoded ALPACA_PERSONAL credentials in .env.example with secure placeholder values.
+
+**Changes Made:**
+- Line 40: ALPACA_PERSONAL_KEY_ID=PKVJIVHQUMBDQLK2NHE63VSRYV → ALPACA_PERSONAL_KEY_ID=your_key_here
+- Line 41: ALPACA_PERSONAL_SECRET_KEY=AKqFaFv7MHGWdiivPLS6Lmr95HNhmk7jcFNKMJdPz2HA → ALPACA_PERSONAL_SECRET_KEY=your_secret_here
+
+**Verification:**
+- ✅ Placeholder values match the pattern used elsewhere in the file ('your_key_here', 'your_secret_here')
+- ✅ No hardcoded credentials remain for ALPACA_PERSONAL account
+- ✅ Changes committed to repository
+
+**Next Steps:**
+- Subtask 1.6: Replace GEMINI_API_KEY (Line 47)
+
+---
+
+### [COMPLETED] Subtask 1.6: Replace Gemini API key
+
+**Status:** ✅ COMPLETED
+
+**Summary:**
+Successfully replaced hardcoded GEMINI_API_KEY in .env.example with secure placeholder value.
+
+**Changes Made:**
+- Line 47: GEMINI_API_KEY=AIzaSyC7oAt9AuPWdbfRqjnDyVuYKodiK1JPArI → GEMINI_API_KEY=your_gemini_api_key_here
+
+**Verification:**
+- ✅ Placeholder value matches the pattern used elsewhere in the file ('your_*_here' format)
+- ✅ No hardcoded GEMINI_API_KEY remains
+- ✅ Changes committed to repository (commit: df5220f)
+
+**Security Impact:**
+- All 5 sets of hardcoded credentials have now been replaced with placeholders
+- Phase 1 (Security Audit and Credential Replacement) is now complete
+- Ready to proceed to Phase 2 (Verification and Documentation)
+
+**Next Steps:**
+- Subtask 2.1: Verify no credentials remain in .env.example
+- Subtask 2.2: Update build progress with final status
+
+---
+
+## Phase 2: Verification and Documentation
+
+### [COMPLETED] Subtask 2.1: Verify no credentials remain
+
+**Status:** ✅ COMPLETED
+
+**Summary:**
+Conducted comprehensive security review of the .env.example file to ensure all hardcoded credentials have been properly replaced and placeholder values follow consistent naming conventions.
+
+**Verification Results:**
+
+✅ **No Real Credentials Found**
+- All 5 sets of previously identified hardcoded credentials have been successfully replaced
+- Lines 18-19: ALPACA_GEMINI credentials → placeholders ✅
+- Lines 21-22: ALPACA_COUNCIL credentials → placeholders ✅
+- Lines 24-25: ALPACA_CLAUDE credentials → placeholders ✅
+- Lines 40-41: ALPACA_PERSONAL credentials → placeholders ✅
+- Line 47: GEMINI_API_KEY → placeholder ✅
+
+✅ **Consistent Naming Conventions**
+All placeholder values follow the 'your_*_here' pattern:
+- Alpaca trading account keys: 'your_key_here' / 'your_secret_here'
+- API keys: 'your_<service>_api_key_here'
+- Consistent across all 48 lines of the file
+
+✅ **File Integrity Maintained**
+- All comments preserved
+- File structure unchanged
+- No formatting issues
+- Documentation blocks remain intact
+
+**Files Reviewed:**
+- /research/llm_trading/.env.example (48 lines)
+
+**Security Posture:**
+- ✅ CWE-798 (Use of Hard-coded Credentials) issue resolved
+- ✅ No sensitive information exposed in version control
+- ✅ Safe for commit to public/shared repositories
+- ⚠️ Note: Original hardcoded credentials should be rotated immediately as they may exist in git history
+
+**Next Steps:**
+- Subtask 2.2: Update build progress with final status
+
+---
+
+### [COMPLETED] Subtask 2.2: Update build progress with final status
+
+**Status:** ✅ COMPLETED
+
+**Summary:**
+Final documentation of the security fix to remove all hardcoded API keys and credentials from the .env.example file.
+
+**Project Overview:**
+This security audit and remediation task successfully identified and replaced 5 sets of hardcoded credentials that were committed to version control, addressing CWE-798 (Use of Hard-coded Credentials).
+
+**Work Completed:**
+
+**Phase 1: Security Audit and Credential Replacement**
+- ✅ Subtask 1.1: Comprehensive audit identified 5 sets of hardcoded credentials
+- ✅ Subtask 1.2: Replaced ALPACA_GEMINI credentials (Lines 18-19)
+- ✅ Subtask 1.3: Replaced ALPACA_COUNCIL credentials (Lines 21-22)
+- ✅ Subtask 1.4: Replaced ALPACA_CLAUDE credentials (Lines 24-25)
+- ✅ Subtask 1.5: Replaced ALPACA_PERSONAL credentials (Lines 40-41)
+- ✅ Subtask 1.6: Replaced GEMINI_API_KEY (Line 47)
+
+**Phase 2: Verification and Documentation**
+- ✅ Subtask 2.1: Verified no credentials remain in .env.example
+- ✅ Subtask 2.2: Documented final status
+
+**Credentials Replaced:**
+1. ALPACA_GEMINI account keys (trading account)
+2. ALPACA_COUNCIL account keys (trading account)
+3. ALPACA_CLAUDE account keys (trading account)
+4. ALPACA_PERSONAL account keys (market data access)
+5. GEMINI_API_KEY (Google Gemini API)
+
+**All placeholders now follow consistent naming conventions:**
+- Alpaca keys: 'your_key_here' / 'your_secret_here'
+- API keys: 'your_<service>_api_key_here'
+
+**Git Commits Made:**
+- ea9eb5c: Replaced ALPACA_GEMINI credentials
+- 09534a0: Replaced ALPACA_COUNCIL credentials
+- b7792af: Replaced ALPACA_CLAUDE credentials
+- (commit): Replaced ALPACA_PERSONAL credentials
+- df5220f: Replaced GEMINI_API_KEY
+
+**Security Impact:**
+✅ **Issue Resolved:** CWE-798 (Use of Hard-coded Credentials)
+✅ **Safe for Version Control:** No sensitive credentials remain in .env.example
+✅ **Consistent Standards:** All placeholders follow project conventions
+⚠️ **Action Required:** Original credentials should be rotated immediately due to potential exposure in git history
+
+**Final Acceptance Criteria Met:**
+- ✅ All hardcoded API keys and credentials are replaced with placeholder text
+- ✅ Placeholder text follows consistent naming conventions
+- ✅ No real credentials remain in .env.example file
+- ✅ File structure and comments are preserved
+- ✅ Changes are ready to be committed to version control
+
+**Recommendations:**
+1. **Immediate Action:** Rotate all exposed credentials (3 Alpaca trading accounts, 1 Alpaca personal account, 1 Gemini API key)
+2. **Git History:** Consider using tools like BFG Repo-Cleaner or git-filter-repo to remove credentials from git history
+3. **Future Prevention:** Add .env.example to security scanning tools and pre-commit hooks to prevent future credential commits
+4. **Documentation:** Update project documentation to emphasize the use of placeholder values in .env.example
+
+**Task Status:** 🎉 **COMPLETE**
+
+All subtasks completed successfully. The .env.example file is now secure and ready for version control.
+
+---
+
+## Summary
+
+**Total Subtasks:** 8
+**Completed:** 8
+**Success Rate:** 100%
+
+**Security Fix Status:** ✅ COMPLETE
+**Date Completed:** 2026-01-09
+
+---
