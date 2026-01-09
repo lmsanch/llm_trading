@@ -83,6 +83,14 @@ app.add_middleware(
 )
 
 # Add API key authentication middleware
+# This middleware validates X-API-Key header on ALL requests except:
+#   - / (root health check)
+#   - /health (health check)
+#   - /api/health (API health check)
+# All other endpoints require a valid API key to protect:
+#   - Trading operations (positions, accounts, trades)
+#   - LLM operations (research, pitches, council)
+#   - Sensitive data (conversations, configurations)
 app.add_middleware(APIKeyMiddleware)
 
 # ============================================================================
@@ -602,10 +610,24 @@ def _format_trades_for_frontend(context: PipelineContext) -> List[Dict[str, Any]
 # TRADING DASHBOARD ENDPOINTS
 # ============================================================================
 
+# ============================================================================
+# PUBLIC ENDPOINTS (No Authentication Required)
+# ============================================================================
+# These endpoints are exempt from authentication via APIKeyMiddleware.
+# Exempted paths: /, /health, /api/health
+#
+# All other endpoints require authentication via X-API-Key header.
+# ============================================================================
+
 
 @app.get("/")
 async def root():
-    """Health check endpoint."""
+    """
+    Health check endpoint - PUBLIC (no authentication required).
+
+    Returns basic service status and pipeline state information.
+    This endpoint is intentionally public for monitoring and health checks.
+    """
     return {
         "status": "ok",
         "service": "LLM Council API",
@@ -615,6 +637,15 @@ async def root():
         "council_status": pipeline_state.council_status,
         "execution_status": pipeline_state.execution_status,
     }
+
+
+# ============================================================================
+# PROTECTED ENDPOINTS (Authentication Required)
+# ============================================================================
+# All endpoints below require authentication via X-API-Key header.
+# The APIKeyMiddleware validates the key on every request.
+# Individual endpoints may also use Depends(get_api_key) for explicit validation.
+# ============================================================================
 
 
 # --- RESEARCH ENDPOINTS ---
