@@ -39,6 +39,14 @@ class ChairmanStage(Stage):
     def name(self) -> str:
         return "ChairmanStage"
 
+    def __init__(self, temperature: float | None = None):
+        super().__init__()
+        from ..utils.temperature_manager import TemperatureManager
+
+        self.temperature = temperature or TemperatureManager().get_temperature(
+            "chairman"
+        )
+
     async def execute(self, context: PipelineContext) -> PipelineContext:
         """
         Execute chairman synthesis stage.
@@ -126,7 +134,7 @@ Be decisive but thorough. Acknowledge dissent where appropriate.""",
         ]
 
         # Query chairman model
-        response = await query_chairman(messages)
+        response = await query_chairman(messages, temperature=self.temperature)
 
         if response is None:
             print("  ❌ Failed to generate chairman decision")
@@ -313,7 +321,6 @@ Return as valid JSON only, no markdown formatting."""
             if selected_trade.get("direction") not in ["LONG", "SHORT", "FLAT"]:
                 print(f"  ⚠️  Invalid direction: {selected_trade.get('direction')}")
                 return self._fallback_decision([])
-
 
             conviction = decision.get("conviction", 0)
             if not isinstance(conviction, (int, float)):

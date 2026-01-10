@@ -1,10 +1,60 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
-import { Save, Eye, EyeOff, Check, Key } from 'lucide-react';
+import { Save, Eye, EyeOff, Check, Key, Search } from 'lucide-react';
 
 export default function SettingsTab() {
+  const [searchSettings, setSearchSettings] = useState({
+    default_provider: 'tavily',
+    enable_jina_reader: true,
+    max_results: 10,
+    providers: {
+      tavily: { enabled: true },
+      brave: { enabled: true },
+    },
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null);
+
+  useEffect(() => {
+    loadSearchSettings();
+  }, []);
+
+  const loadSearchSettings = async () => {
+    try {
+      const response = await fetch('/api/search/settings');
+      const data = await response.json();
+      setSearchSettings(data);
+    } catch (error) {
+      console.error('Failed to load search settings:', error);
+    }
+  };
+
+  const saveSearchSettings = async () => {
+    setIsLoading(true);
+    setSaveStatus(null);
+    try {
+      const response = await fetch('/api/search/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(searchSettings),
+      });
+
+      if (response.ok) {
+        setSaveStatus('success');
+        setTimeout(() => setSaveStatus(null), 3000);
+      } else {
+        throw new Error('Failed to save');
+      }
+    } catch (error) {
+      console.error('Failed to save search settings:', error);
+      setSaveStatus('error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
@@ -116,10 +166,97 @@ export default function SettingsTab() {
             </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-2">
-            <Button variant="outline">Discard Changes</Button>
-            <Button>
-                <Save className="mr-2 h-4 w-4" /> Save Configuration
+        {/* Search Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Search Settings</CardTitle>
+            <CardDescription>Configure web search providers for market sentiment.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Search Provider</label>
+                <select
+                  className="w-full p-2 border rounded-md"
+                  value={searchSettings.default_provider}
+                  onChange={(e) => setSearchSettings(prev => ({ ...prev, default_provider: e.target.value }))}
+                >
+                  <option value="tavily">Tavily</option>
+                  <option value="brave">Brave</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Max Results</label>
+                <input
+                  type="number"
+                  min="5"
+                  max="50"
+                  className="w-full p-2 border rounded-md"
+                  value={searchSettings.max_results}
+                  onChange={(e) => setSearchSettings(prev => ({ ...prev, max_results: parseInt(e.target.value) }))}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-3 border rounded-md">
+              <div className="flex items-center gap-3">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium text-sm">Jina Reader (Full Article Content)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {searchSettings.enable_jina_reader ? (
+                  <Check className="h-5 w-5 text-green-500" />
+                ) : (
+                  <EyeOff className="h-5 w-5 text-muted-foreground" />
+                )}
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={searchSettings.enable_jina_reader}
+                    onChange={(e) => setSearchSettings(prev => ({ ...prev, enable_jina_reader: e.target.checked }))}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-checked:after:translate-x-full"></div>
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Provider Status</label>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-2 border rounded-md">
+                  <span className="text-sm">Tavily</span>
+                  <Badge variant={searchSettings.providers.tavily?.enabled ? 'success' : 'secondary'}>
+                    {searchSettings.providers.tavily?.enabled ? 'Enabled' : 'Disabled'}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between p-2 border rounded-md">
+                  <span className="text-sm">Brave</span>
+                  <Badge variant={searchSettings.providers.brave?.enabled ? 'success' : 'secondary'}>
+                    {searchSettings.providers.brave?.enabled ? 'Enabled' : 'Disabled'}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+            <div className="flex justify-end gap-2">
+            {saveStatus === 'success' && (
+              <Badge variant="success" className="mr-2">Saved!</Badge>
+            )}
+            {saveStatus === 'error' && (
+              <Badge variant="destructive" className="mr-2">Failed</Badge>
+            )}
+            <Button variant="outline" onClick={() => {
+              loadSearchSettings();
+              setSaveStatus(null);
+            }}>
+              Discard Changes
+            </Button>
+            <Button onClick={saveSearchSettings} disabled={isLoading}>
+                <Save className="mr-2 h-4 w-4" /> {isLoading ? 'Saving...' : 'Save Configuration'}
             </Button>
         </div>
       </div>

@@ -40,22 +40,42 @@ def council(query: str):
 
 @cli.command()
 @click.option("--query", type=str, default="", help="Optional query for research stage")
-def run_weekly(query: str = ""):
+@click.option(
+    "--mode",
+    type=click.Choice(["chat_only", "ranking", "full"]),
+    default="full",
+    help="Execution mode",
+)
+@click.option(
+    "--search-provider",
+    type=click.Choice(["tavily", "brave"]),
+    default=None,
+    help="Search provider (default: from config)",
+)
+def run_weekly(query: str = "", mode: str = "full", search_provider: str | None = None):
     """Run full weekly pipeline (research -> PM pitches -> peer review -> chairman -> execute)."""
 
     async def run():
-        click.echo("Running full weekly pipeline...")
+        click.echo(f"Running full weekly pipeline (mode: {mode})...")
         click.echo("=" * 60)
         click.echo("This will:")
-        click.echo("  1. Collect research from Gemini and DeepSeek")
+        click.echo("  1. Collect research from Perplexity Sonar Deep Research")
         click.echo("  2. Generate PM pitches from 5 models")
-        click.echo("  3. Run anonymized peer review")
-        click.echo("  4. Synthesize final chairman decision")
+
+        if mode == "ranking" or mode == "full":
+            click.echo("  3. Run anonymized peer review")
+
+        if mode == "full":
+            click.echo("  4. Synthesize final chairman decision")
+
         click.echo("  5. Save trades as PENDING for GUI approval")
         click.echo("=" * 60)
 
         # Run weekly pipeline
-        result = await run_weekly_pipeline(query)
+        pipeline = WeeklyTradingPipeline(
+            search_provider=search_provider, execution_mode=mode
+        )
+        result = await pipeline.run(query)
 
         if result.get("success"):
             click.echo("\n✅ Weekly pipeline complete!")
@@ -173,15 +193,10 @@ def status():
     else:
         click.echo("✗ Alpaca API keys missing")
 
-    if os.getenv("GEMINI_API_KEY"):
-        click.echo("✓ Gemini API key configured")
-    else:
-        click.echo("  (Optional) Gemini API key not configured")
-
     if os.getenv("PERPLEXITY_API_KEY"):
         click.echo("✓ Perplexity API key configured")
     else:
-        click.echo("  (Optional) Perplexity API key not configured")
+        click.echo("  (Required) Perplexity API key not configured")
 
     click.echo(
         f"Database URL: {os.getenv('DATABASE_URL', 'postgresql://localhost:5432/llm_trading')}"

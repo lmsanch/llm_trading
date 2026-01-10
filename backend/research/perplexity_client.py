@@ -17,7 +17,9 @@ PERPLEXITY_DEEP_RESEARCH_MODEL = "sonar-deep-research"
 
 async def query_perplexity_research(
     prompt: str,
-    market_data: Dict[str, Any]
+    market_data: Dict[str, Any],
+    sentiment_data: Dict[str, Any] | None = None,
+    temperature: float = 0.7,
 ) -> Dict[str, Any]:
     """
     Query Perplexity Sonar Deep Research API for macro research.
@@ -27,6 +29,7 @@ async def query_perplexity_research(
     Args:
         prompt: Research prompt (from config/prompts/research_prompt.md)
         market_data: Market snapshot data (prices, account info, etc.)
+        sentiment_data: Optional sentiment pack from MarketSentimentStage
 
     Returns:
         Dict with:
@@ -39,14 +42,14 @@ async def query_perplexity_research(
         return _error_response("PERPLEXITY_API_KEY not found in environment")
 
     # Build the full prompt with market context
-    full_prompt = _build_prompt(prompt, market_data)
+    full_prompt = _build_prompt(prompt, market_data, sentiment_data)
 
     # Perplexity Sonar Deep Research API endpoint
     url = "https://api.perplexity.ai/chat/completions"
 
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     payload = {
@@ -54,17 +57,14 @@ async def query_perplexity_research(
         "messages": [
             {
                 "role": "system",
-                "content": "You are a senior macro research analyst providing actionable trading insights. Keep your report SHORT (1000-2000 words max) and focused on the NEXT 7 DAYS ONLY. Always provide both a natural language report AND structured JSON data."
+                "content": "You are a senior macro research analyst providing actionable trading insights. Keep your report SHORT (1000-2000 words max) and focused on the NEXT 7 DAYS ONLY. Always provide both a natural language report AND structured JSON data.",
             },
-            {
-                "role": "user",
-                "content": full_prompt
-            }
+            {"role": "user", "content": full_prompt},
         ],
         "reasoning_effort": "high",  # Options: low, medium, high
-        "temperature": 0.7,
+        "temperature": temperature,
         "max_tokens": 16384,
-        "stream": False
+        "stream": False,
     }
 
     try:
@@ -82,7 +82,9 @@ async def query_perplexity_research(
 
             print("  ✅ Perplexity Sonar Deep Research completed!")
             # Parse the response
-            return _parse_research_response(content, "perplexity", PERPLEXITY_DEEP_RESEARCH_MODEL)
+            return _parse_research_response(
+                content, "perplexity", PERPLEXITY_DEEP_RESEARCH_MODEL
+            )
 
     except httpx.HTTPStatusError as e:
         status = e.response.status_code
@@ -96,7 +98,11 @@ async def query_perplexity_research(
         return _error_response(f"Error: {str(e)}")
 
 
-def _build_prompt(prompt_template: str, market_data: Dict[str, Any]) -> str:
+def _build_prompt(
+    prompt_template: str,
+    market_data: Dict[str, Any],
+    sentiment_data: Dict[str, Any] | None = None,
+) -> str:
     """Build full prompt with market context."""
     asof = market_data.get("asof_et", "Unknown")
     account_info = market_data.get("account_info", {})
@@ -105,15 +111,35 @@ def _build_prompt(prompt_template: str, market_data: Dict[str, Any]) -> str:
     market_context = f"""
 MARKET SNAPSHOT:
 - As of: {asof}
-- Portfolio Value: ${account_info.get('portfolio_value', 'N/A')}
-- Cash: ${account_info.get('cash', 'N/A')}
-- Buying Power: ${account_info.get('buying_power', 'N/A')}
+- Portfolio Value: ${account_info.get("portfolio_value", "N/A")}
+- Cash: ${account_info.get("cash", "N/A")}
+- Buying Power: ${account_info.get("buying_power", "N/A")}
 
 CURRENT PRICES:
 {_format_instruments(instruments)}
 """
 
-    return f"{prompt_template}\n\n{market_context}"
+    sentiment_context = ""
+    if sentiment_data:
+        sentiment_summary = sentiment_data.get("sentiment_summary", "")
+        key_headlines = sentiment_data.get("key_headlines", [])
+        overall_sentiment = sentiment_data.get(
+            "overall_market_sentiment", "neutral"
+        ).upper()
+
+        sentiment_context = f"""
+MARKET SENTIMENT SUMMARY:
+- Overall Sentiment: {overall_sentiment}
+- Summary: {sentiment_summary}
+"""
+
+        if key_headlines:
+            sentiment_context += f"""
+KEY HEADLINES:
+{chr(10).join([f"- {h}" for h in key_headlines[:5]])}
+"""
+
+    return f"{prompt_template}\n\n{market_context}\n{sentiment_context}"
 
 
 def _format_instruments(instruments: Dict[str, Any]) -> str:
@@ -142,12 +168,12 @@ def _parse_research_response(content: str, source: str, model: str) -> Dict[str,
     natural_language = content
 
     # Extract JSON from the response
-    json_match = re.search(r'```json\s*(.*?)\s*```', content, re.DOTALL)
+    json_match = re.search(r"```json\s*(.*?)\s*```", content, re.DOTALL)
     if json_match:
         json_str = json_match.group(1)
     else:
         # Try to find JSON without markdown code blocks
-        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+        json_match = re.search(r"\{.*\}", content, re.DOTALL)
         json_str = json_match.group(0) if json_match else "{}"
 
     # Parse JSON
@@ -162,24 +188,21 @@ def _parse_research_response(content: str, source: str, model: str) -> Dict[str,
         "model": model,
         "natural_language": natural_language,
         "structured_json": structured_json,
-        "generated_at": _get_timestamp()
+        "generated_at": _get_timestamp(),
     }
 
 
 def _empty_research_pack() -> Dict[str, Any]:
     """Return empty research pack structure."""
     return {
-        "macro_regime": {
-            "risk_mode": "NEUTRAL",
-            "description": "Research unavailable"
-        },
+        "macro_regime": {"risk_mode": "NEUTRAL", "description": "Research unavailable"},
         "top_narratives": [],
         "tradable_candidates": [],
         "event_calendar": [],
         "confidence_notes": {
             "known_unknowns": "Parse error",
-            "data_quality_flags": ["json_parse_failed"]
-        }
+            "data_quality_flags": ["json_parse_failed"],
+        },
     }
 
 
@@ -191,11 +214,12 @@ def _error_response(error_msg: str) -> Dict[str, Any]:
         "natural_language": f"Error: {error_msg}",
         "structured_json": _empty_research_pack(),
         "error": error_msg,
-        "generated_at": _get_timestamp()
+        "generated_at": _get_timestamp(),
     }
 
 
 def _get_timestamp() -> str:
     """Get current ISO timestamp."""
     from datetime import datetime
+
     return datetime.utcnow().isoformat()

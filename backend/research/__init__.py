@@ -1,9 +1,7 @@
-"""Research provider clients for Perplexity and Gemini deep research."""
+"""Research provider clients for Perplexity Sonar Deep Research."""
 
 from .perplexity_client import query_perplexity_research
-from .gemini_client import query_gemini_research
 
 __all__ = [
     "query_perplexity_research",
-    "query_gemini_research",
 ]

@@ -4,6 +4,7 @@ import os
 import asyncio
 from typing import List, Dict, Any, Optional
 from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionMessageParam
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -115,22 +116,34 @@ async def query_model(
     try:
         client = get_requesty_client()
 
+        from typing import cast
+
         response = await client.chat.completions.create(
             model=model_id,
-            messages=messages,
+            messages=cast(List[ChatCompletionMessageParam], messages),
             max_tokens=max_tokens,
             temperature=temperature,
         )
 
+        content = (
+            response.choices[0].message.content
+            if response.choices and response.choices[0].message
+            else ""
+        )
+        usage = response.usage
+        tokens = {}
+        if usage:
+            tokens = {
+                "input": getattr(usage, "prompt_tokens", 0),
+                "output": getattr(usage, "completion_tokens", 0),
+                "total": getattr(usage, "total_tokens", 0),
+            }
+
         return {
-            "content": response.choices[0].message.content,
+            "content": content,
             "model": model_key,
             "model_id": model_id,
-            "tokens": {
-                "input": response.usage.prompt_tokens,
-                "output": response.usage.completion_tokens,
-                "total": response.usage.total_tokens,
-            },
+            "tokens": tokens,
             "account": model_config["account"],
             "alpaca_id": model_config["alpaca_id"],
             "role": model_config["role"],

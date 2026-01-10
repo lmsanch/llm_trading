@@ -1,0 +1,39 @@
+# Provider Configuration
+# Defines all LLM providers and their settings
+
+openrouter:
+  provider_id: "openrouter"
+  api_key_env: "OPENROUTER_API_KEY"
+  api_url: "https://openrouter.ai/api/v1/chat/completions"
+  enabled: true
+  timeout: 120.0
+  max_retries: 3
+
+anthropic:
+  provider_id: "anthropic"
+  api_key_env: "ANTHROPIC_API_KEY"
+  enabled: true
+  timeout: 120.0
+  max_retries: 3
+
+groq:
+  provider_id: "groq"
+  api_key_env: "GROQ_API_KEY"
+  enabled: true
+  timeout: 60.0
+  max_retries: 3
+
+ollama:
+  provider_id: "ollama"
+  base_url: "http://localhost:11434"
+  enabled: false
+  timeout: 120.0
+  max_retries: 1
+
+custom_openai:
+  provider_id: "custom_openai"
+  api_key_env: "CUSTOM_OPENAI_API_KEY"
+  base_url: null
+  enabled: false
+  timeout: 120.0
+  max_retries: 3

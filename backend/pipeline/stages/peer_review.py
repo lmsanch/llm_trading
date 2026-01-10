@@ -44,6 +44,14 @@ class PeerReviewStage(Stage):
     def name(self) -> str:
         return "PeerReviewStage"
 
+    def __init__(self, temperature: float | None = None):
+        super().__init__()
+        from ..utils.temperature_manager import TemperatureManager
+
+        self.temperature = temperature or TemperatureManager().get_temperature(
+            "peer_review"
+        )
+
     async def execute(self, context: PipelineContext) -> PipelineContext:
         """
         Execute peer review stage.
@@ -163,7 +171,7 @@ Be fair but critical. Identify weaknesses and suggest improvements.""",
         ]
 
         # Query all PM models for peer reviews
-        responses = await query_pm_models(messages)
+        responses = await query_pm_models(messages, temperature=self.temperature)
 
         # Parse and return peer reviews
         peer_reviews = []

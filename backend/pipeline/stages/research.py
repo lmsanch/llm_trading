@@ -10,11 +10,12 @@ from datetime import datetime
 import psycopg2
 from psycopg2.extras import Json
 
-from ...research import query_perplexity_research, query_gemini_research
+from ...research import query_perplexity_research
 from ...storage.data_fetcher import MarketDataManager
 from ..graph_extractor import extract_graph
 from ..context import PipelineContext, ContextKey
 from ..base import Stage
+from .market_sentiment import SENTIMENT_PACK
 
 
 # Context keys for research
@@ -30,14 +31,16 @@ class ResearchStage(Stage):
     This stage:
     1. Fetches current market data from Alpaca
     2. Loads research prompt from markdown file
-    3. Queries Perplexity for deep research
+    3. Queries Perplexity Sonar Deep Research
     4. Returns natural language reports + structured JSON
     """
 
-    def __init__(self, selected_models: list = None, prompt_override: str = None):
+    def __init__(
+        self, prompt_override: str | None = None, temperature: float | None = None
+    ):
         super().__init__()
-        self.selected_models = selected_models or ["perplexity"]
         self.prompt_override = prompt_override
+        self.temperature = temperature
 
     @property
     def name(self) -> str:
@@ -64,70 +67,54 @@ class ResearchStage(Stage):
         # Step 2: Load research prompt
         print("📋 Loading research prompt template...")
         if self.prompt_override:
-             print("  ⚠️  Using PROMPT OVERRIDE provided in request")
-             research_prompt = self.prompt_override
+            print("  ⚠️  Using PROMPT OVERRIDE provided in request")
+            research_prompt = self.prompt_override
         else:
             research_prompt = self._load_research_prompt()
             if not research_prompt:
                 print("  ❌ Failed to load research prompt, using default")
                 research_prompt = self._get_default_prompt()
 
-        # Step 3: Query selected research providers in parallel
-        print(f"🔍 Querying Selected Models: {self.selected_models}")
-        
-        tasks = []
-        if "perplexity" in self.selected_models:
-             tasks.append(self._run_perplexity_research(research_prompt, market_snapshot))
-        
-        if "gemini" in self.selected_models:
-             tasks.append(self._run_gemini_research(research_prompt, market_snapshot))
-             
-        if not tasks:
-            print("  ⚠️  No models selected!")
-            return context.set(MARKET_SNAPSHOT, market_snapshot)
+        sentiment_pack = context.get(SENTIMENT_PACK)
+        if sentiment_pack:
+            print("  📰 Market sentiment data found in context")
+        else:
+            print("  ℹ️  No market sentiment data in context")
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        print("🔍 Querying Perplexity Sonar Deep Research...")
 
-        # Handle results - map back to keys
-        perplexity_result = None
-        gemini_result = None
-        
-        # Unpack based on selection order
-        result_idx = 0
-        
-        if "perplexity" in self.selected_models:
-            perplexity_result = results[result_idx]
-            result_idx += 1
-            
+        try:
+            if not research_prompt:
+                print("  ⚠️  No research prompt available, skipping Perplexity research")
+                perplexity_result = self._error_research_pack(
+                    "perplexity", "No research prompt available"
+                )
+            else:
+                perplexity_result = await self._run_perplexity_research(
+                    research_prompt, market_snapshot, sentiment_pack, self.temperature
+                )
+
             if isinstance(perplexity_result, Exception):
                 print(f"  ⚠️  Perplexity research failed: {perplexity_result}")
-                perplexity_result = self._error_research_pack("perplexity", str(perplexity_result))
+                perplexity_result = self._error_research_pack(
+                    "perplexity", str(perplexity_result)
+                )
             else:
-                 print(f"  ✅ Perplexity: {perplexity_result.get('structured_json', {}).get('macro_regime', {}).get('risk_mode', 'Unknown')}")
-                 # Save to database
-                 self._save_research_to_db(perplexity_result, "perplexity")
+                print(
+                    f"  ✅ Perplexity: {perplexity_result.get('structured_json', {}).get('macro_regime', {}).get('risk_mode', 'Unknown')}"
+                )
+                # Save to database
+                self._save_research_to_db(perplexity_result, "perplexity")
 
+        except Exception as e:
+            print(f"  ⚠️  Perplexity research failed: {e}")
+            perplexity_result = self._error_research_pack("perplexity", str(e))
 
-        if "gemini" in self.selected_models:
-            gemini_result = results[result_idx]
-            result_idx += 1
-            
-            if isinstance(gemini_result, Exception):
-                print(f"  ⚠️  Gemini research failed: {gemini_result}")
-                gemini_result = self._error_research_pack("gemini", str(gemini_result))
-            else:
-                 print(f"  ✅ Gemini: {gemini_result.get('structured_json', {}).get('macro_regime', {}).get('risk_mode', 'Unknown')}")
-                 # Save to database
-                 self._save_research_to_db(gemini_result, "gemini")
-
-
-        # Return context with both research packs
+        # Return context with research pack
         ctx = context.set(MARKET_SNAPSHOT, market_snapshot)
         if perplexity_result:
             ctx = ctx.set(RESEARCH_PACK_A, perplexity_result)
-        if gemini_result:
-            ctx = ctx.set(RESEARCH_PACK_B, gemini_result)
-            
+
         return ctx
 
     async def _fetch_market_data(self) -> Dict[str, Any]:
@@ -149,6 +136,7 @@ class ResearchStage(Stage):
             # Add account info from Alpaca (optional - don't fail if unavailable)
             try:
                 from ...multi_alpaca_client import MultiAlpacaManager
+
                 manager = MultiAlpacaManager()
                 client = manager.get_client("COUNCIL")
                 account_info = await client.get_account()
@@ -168,7 +156,9 @@ class ResearchStage(Stage):
                     "portfolio_value": "N/A",
                 }
 
-            print(f"  ✅ Loaded market data from database for {len(market_snapshot.get('instruments', {}))} instruments")
+            print(
+                f"  ✅ Loaded market data from database for {len(market_snapshot.get('instruments', {}))} instruments"
+            )
             return market_snapshot
 
         except Exception as e:
@@ -177,10 +167,10 @@ class ResearchStage(Stage):
             return {
                 "asof_et": self._get_timestamp(),
                 "error": str(e),
-                "instruments": {}
+                "instruments": {},
             }
 
-    def _calculate_rsi(self, prices: list, period: int = 14) -> float:
+    def _calculate_rsi(self, prices: list, period: int = 14) -> float | None:
         """
         Calculate Relative Strength Index (RSI).
 
@@ -189,7 +179,7 @@ class ResearchStage(Stage):
         if len(prices) < period + 1:
             return None
 
-        deltas = [prices[i] - prices[i-1] for i in range(1, len(prices))]
+        deltas = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
         gains = [d if d > 0 else 0 for d in deltas]
         losses = [-d if d < 0 else 0 for d in deltas]
 
@@ -204,7 +194,7 @@ class ResearchStage(Stage):
 
         return rsi
 
-    def _load_research_prompt(self) -> str:
+    def _load_research_prompt(self) -> str | None:
         """
         Load research prompt from markdown file.
 
@@ -212,13 +202,18 @@ class ResearchStage(Stage):
             Prompt content as string, or None if file not found
         """
         try:
-            prompt_path = Path(__file__).parent.parent.parent / "config" / "prompts" / "research_prompt.md"
+            prompt_path = (
+                Path(__file__).parent.parent.parent
+                / "config"
+                / "prompts"
+                / "research_prompt.md"
+            )
 
             if not prompt_path.exists():
                 print(f"  ⚠️  Prompt file not found: {prompt_path}")
                 return None
 
-            with open(prompt_path, 'r') as f:
+            with open(prompt_path, "r") as f:
                 content = f.read()
             print(f"  ✅ Loaded prompt from {prompt_path}")
             return content
@@ -227,7 +222,7 @@ class ResearchStage(Stage):
             print(f"  ❌ Error loading prompt: {e}")
             return None
 
-    def _get_default_prompt(self) -> str:
+    def _get_default_prompt(self) -> str | None:
         """Return default prompt if file loading fails."""
         return """You are a senior macro research analyst. Provide macro research with:
 
@@ -251,21 +246,19 @@ JSON format:
     async def _run_perplexity_research(
         self,
         prompt: str,
-        market_snapshot: Dict[str, Any]
+        market_snapshot: Dict[str, Any],
+        sentiment_pack: Dict[str, Any] | None = None,
+        temperature: float | None = None,
     ) -> Dict[str, Any]:
-        """Run Perplexity Sonar Pro research."""
-        print("  📊 Querying Perplexity Sonar Pro...")
-        result = await query_perplexity_research(prompt, market_snapshot)
-        return result
+        print("  📊 Querying Perplexity Sonar Deep Research...")
+        from ..utils.temperature_manager import TemperatureManager
 
-    async def _run_gemini_research(
-        self,
-        prompt: str,
-        market_snapshot: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Run Gemini Deep Research."""
-        print("  🧠 Querying Gemini Deep Research...")
-        result = await query_gemini_research(prompt, market_snapshot)
+        if temperature is None:
+            temperature = TemperatureManager().get_temperature("research")
+
+        result = await query_perplexity_research(
+            prompt, market_snapshot, sentiment_pack, temperature
+        )
         return result
 
     def _error_research_pack(self, source: str, error: str) -> Dict[str, Any]:
@@ -277,86 +270,100 @@ JSON format:
             "structured_json": {
                 "macro_regime": {
                     "risk_mode": "NEUTRAL",
-                    "description": "Research unavailable"
+                    "description": "Research unavailable",
                 },
                 "top_narratives": [],
                 "tradable_candidates": [],
                 "event_calendar": [],
                 "confidence_notes": {
                     "known_unknowns": f"Error: {error}",
-                    "data_quality_flags": ["research_failed"]
-                }
+                    "data_quality_flags": ["research_failed"],
+                },
             },
             "error": error,
-            "generated_at": self._get_timestamp()
+            "generated_at": self._get_timestamp(),
         }
 
     def _get_timestamp(self) -> str:
         """Get current ISO timestamp."""
         from datetime import datetime
+
         return datetime.utcnow().isoformat()
 
-    def _save_research_to_db(self, research_result: Dict[str, Any], provider: str) -> None:
+    def _save_research_to_db(
+        self, research_result: Dict[str, Any], provider: str
+    ) -> None:
         """
         Save research result to database.
-        
+
         Args:
             research_result: Research pack with natural_language and structured_json
-            provider: 'perplexity' or 'gemini'
+            provider: 'perplexity'
         """
         try:
             week_id = get_week_id()
-            model = research_result.get('model', 'unknown')
-            natural_language = research_result.get('natural_language', '')
-            structured_json = research_result.get('structured_json', {})
-            
+            model = research_result.get("model", "unknown")
+            natural_language = research_result.get("natural_language", "")
+            structured_json = research_result.get("structured_json", {})
+
             # --- AUTO-GENERATE KNOWLEDGE GRAPH ---
             try:
                 # Add metadata for extractor
-                research_result['week_id'] = week_id
+                research_result["week_id"] = week_id
                 graph_data = extract_graph(research_result)
-                structured_json['weekly_graph'] = graph_data
-                print(f"  🕸️ Generated knowledge graph with {len(graph_data.get('nodes',[]))} nodes")
+                structured_json["weekly_graph"] = graph_data
+                print(
+                    f"  🕸️ Generated knowledge graph with {len(graph_data.get('nodes', []))} nodes"
+                )
             except Exception as ge:
                 print(f"  ⚠️ Failed to generate knowledge graph: {ge}")
             # -------------------------------------
 
-            status = 'error' if research_result.get('error') else 'complete'
-            error_message = research_result.get('error')
-            generated_at = research_result.get('generated_at')
-            
+            status = "error" if research_result.get("error") else "complete"
+            error_message = research_result.get("error")
+            generated_at = research_result.get("generated_at")
+
             # Connect to database
             db_name = os.getenv("DATABASE_NAME", "llm_trading")
             db_user = os.getenv("DATABASE_USER", "luis")
-            
+
             conn = psycopg2.connect(dbname=db_name, user=db_user)
-            
+
             try:
                 with conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO research_reports 
                         (week_id, provider, model, natural_language, structured_json, 
                          status, error_message, generated_at)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
-                    """, (
-                        week_id,
-                        provider,
-                        model,
-                        natural_language,
-                        Json(structured_json),
-                        status,
-                        error_message,
-                        generated_at
-                    ))
-                    
-                    research_id = cur.fetchone()[0]
+                    """,
+                        (
+                            week_id,
+                            provider,
+                            model,
+                            natural_language,
+                            Json(structured_json),
+                            status,
+                            error_message,
+                            generated_at,
+                        ),
+                    )
+
+                    result = cur.fetchone()
+                    if result:
+                        research_id = result[0]
+                    else:
+                        research_id = None
                     conn.commit()
-                    print(f"  💾 Saved {provider} research to database (ID: {research_id})")
-                    
+                    print(
+                        f"  💾 Saved {provider} research to database (ID: {research_id})"
+                    )
+
             finally:
                 conn.close()
-                
+
         except Exception as e:
             print(f"  ⚠️  Failed to save {provider} research to database: {e}")
 

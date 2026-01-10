@@ -3,41 +3,42 @@
 
 # Research Layer
 research:
-  gemini_deep:
-    provider: "gemini"
-    model: "gemini-2.5-pro"  # Or appropriate deep research model
-    api_key_env: "GEMINI_API_KEY"
-    enabled: true
-
   perplexity_deep:
     provider: "perplexity"
-    model: "sonar-pro"  # Or appropriate deep research model
+    model: "sonar-pro"
     api_key_env: "PERPLEXITY_API_KEY"
     enabled: true
 
 # PM Layer (Portfolio Managers)
+# Note: Model IDs use provider:model format for routing
 pm_models:
   - id: "pm_gpt51"
     name: "GPT-5.1 PM"
-    openrouter_id: "openai/gpt-5.1"
+    model: "openrouter:openai/gpt-5.1"
     role: "portfolio_manager"
     enabled: true
 
   - id: "pm_gemini3"
     name: "Gemini 3.0 Pro PM"
-    openrouter_id: "google/gemini-3-pro-preview"
+    model: "openrouter:google/gemini-3-pro-preview"
     role: "portfolio_manager"
     enabled: true
 
   - id: "pm_sonnet45"
     name: "Claude Sonnet 4.5 PM"
-    openrouter_id: "anthropic/claude-sonnet-4.5"
+    model: "anthropic:claude-sonnet-4.5"
     role: "portfolio_manager"
     enabled: true
 
   - id: "pm_grok4"
     name: "Grok 4 PM"
-    openrouter_id: "x-ai/grok-4"
+    model: "openrouter:x-ai/grok-4"
+    role: "portfolio_manager"
+    enabled: true
+
+  - id: "pm_deepseek"
+    name: "DeepSeek V3 PM"
+    model: "openrouter:deepseek/deepseek-r1"
     role: "portfolio_manager"
     enabled: true
 
@@ -45,21 +46,27 @@ pm_models:
 chairman:
   id: "chairman_opus"
   name: "Chairman (CIO)"
-  openrouter_id: "anthropic/claude-opus-4"  # Or other strong synthesizer model
+  model: "anthropic:claude-opus-4"
   role: "chairman"
   enabled: true
 
-# OpenRouter Configuration
-openrouter:
-  api_key_env: "OPENROUTER_API_KEY"
-  api_url: "https://openrouter.ai/api/v1/chat/completions"
-  default_timeout: 120.0
-  max_retries: 3
-
 # Title Generation (fast, cheap model)
 title_generation:
-  openrouter_id: "google/gemini-2.5-flash"
+  model: "openrouter:google/gemini-2.5-flash"
   timeout: 30.0
+
+# Stage-Specific Temperature Controls
+temperature:
+  research: 0.3
+  market_sentiment: 0.3
+  pm_pitch: 0.7
+  peer_review: 0.3
+  chairman: 0.4
+
+# Council Configuration
+council:
+  size: 5  # Number of PMs to use (2-8)
+  execution_mode: "full"  # "chat_only" | "ranking" | "full"
 
 # Prompt Templates
 prompts:
@@ -73,22 +80,8 @@ schemas:
   peer_review: "council/schemas/peer_review.json"
   chairman_decision: "council/schemas/chairman_decision.json"
 
-# Model-Specific Settings
-model_settings:
-  # Models that support reasoning tokens
-  reasoning_models:
-    - "openai/o1-preview"
-    - "openai/o1-mini"
-
-  # Models that need special formatting
-  special_formatting:
-    "x-ai/grok-4":
-      max_tokens: 4096
-      temperature: 0.7
-
 # Validation Settings
 validation:
-  # Retry with "fix-json" mode on schema validation failure
   auto_fix_json: true
   max_fix_retries: 2
 

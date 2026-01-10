@@ -1,0 +1,19 @@
+# Search Configuration
+# Web search providers and settings
+
+default_provider: "tavily"
+enable_jina_reader: true
+max_results: 10
+
+providers:
+  tavily:
+    provider_id: "tavily"
+    api_key_env: "TAVILY_API_KEY"
+    enabled: true
+    timeout: 30.0
+
+  brave:
+    provider_id: "brave"
+    api_key_env: "BRAVE_API_KEY"
+    enabled: true
+    timeout: 30.0
