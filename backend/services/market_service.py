@@ -44,7 +44,7 @@ class MarketService:
             from backend.storage.data_fetcher import MarketDataFetcher
 
             fetcher = MarketDataFetcher()
-            snapshot = fetcher.get_market_snapshot_for_research()
+            snapshot = await fetcher.get_market_snapshot_for_research()
             return snapshot
         except ImportError as e:
             logger.error(f"Failed to import MarketDataFetcher: {e}")
