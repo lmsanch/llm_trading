@@ -7,10 +7,8 @@ from pathlib import Path
 from typing import Dict, Any
 from datetime import datetime
 
-import psycopg2
-from psycopg2.extras import Json
-
 from ...research import query_perplexity_research
+from ...db_helpers import execute_with_returning
 from ...storage.data_fetcher import MarketDataManager
 from ..graph_extractor import extract_graph
 from ..context import PipelineContext, ContextKey
@@ -104,7 +102,7 @@ class ResearchStage(Stage):
                     f"  ✅ Perplexity: {perplexity_result.get('structured_json', {}).get('macro_regime', {}).get('risk_mode', 'Unknown')}"
                 )
                 # Save to database
-                self._save_research_to_db(perplexity_result, "perplexity")
+                await self._save_research_to_db(perplexity_result, "perplexity")
 
         except Exception as e:
             print(f"  ⚠️  Perplexity research failed: {e}")
@@ -290,7 +288,7 @@ JSON format:
 
         return datetime.utcnow().isoformat()
 
-    def _save_research_to_db(
+    async def _save_research_to_db(
         self, research_result: Dict[str, Any], provider: str
     ) -> None:
         """
@@ -323,46 +321,27 @@ JSON format:
             error_message = research_result.get("error")
             generated_at = research_result.get("generated_at")
 
-            # Connect to database
-            db_name = os.getenv("DATABASE_NAME", "llm_trading")
-            db_user = os.getenv("DATABASE_USER", "luis")
+            # Insert into database using async connection pool
+            result = await execute_with_returning(
+                """
+                INSERT INTO research_reports
+                (week_id, provider, model, natural_language, structured_json,
+                 status, error_message, generated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id
+            """,
+                week_id,
+                provider,
+                model,
+                natural_language,
+                structured_json,  # asyncpg handles dicts automatically
+                status,
+                error_message,
+                generated_at,
+            )
 
-            conn = psycopg2.connect(dbname=db_name, user=db_user)
-
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO research_reports 
-                        (week_id, provider, model, natural_language, structured_json, 
-                         status, error_message, generated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        RETURNING id
-                    """,
-                        (
-                            week_id,
-                            provider,
-                            model,
-                            natural_language,
-                            Json(structured_json),
-                            status,
-                            error_message,
-                            generated_at,
-                        ),
-                    )
-
-                    result = cur.fetchone()
-                    if result:
-                        research_id = result[0]
-                    else:
-                        research_id = None
-                    conn.commit()
-                    print(
-                        f"  💾 Saved {provider} research to database (ID: {research_id})"
-                    )
-
-            finally:
-                conn.close()
+            research_id = result["id"] if result else None
+            print(f"  💾 Saved {provider} research to database (ID: {research_id})")
 
         except Exception as e:
             print(f"  ⚠️  Failed to save {provider} research to database: {e}")
