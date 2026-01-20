@@ -5,8 +5,10 @@ import { Button } from "../ui/Button";
 import { Play, CheckCircle, XCircle, RefreshCw, Settings2, Loader2 } from 'lucide-react';
 import { tradingApi } from '../../../api/trading';
 import { cn } from "../../../lib/utils";
+import { useToast } from '../../../hooks/useToast';
 
 export default function TradesTab() {
+  const toast = useToast();
   const [pendingTrades, setPendingTrades] = useState([]);
   const [historyTrades, setHistoryTrades] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +56,7 @@ export default function TradesTab() {
 
   const handleExecuteAll = async () => {
     if (selectedTrades.size === 0) {
-      alert('Please select at least one trade to execute');
+      toast.warning('No Trades Selected', 'Please select at least one trade to execute');
       return;
     }
 
@@ -68,14 +70,14 @@ export default function TradesTab() {
       // Refresh trades after execution
       await loadTrades();
       setSelectedTrades(new Set());
-      
+
       // Show success message
       if (result.status === 'success') {
-        alert(`Successfully executed ${tradeIds.length} trade(s)`);
+        toast.success('Trades Executed', `Successfully executed ${tradeIds.length} trade(s)`);
       }
     } catch (error) {
       console.error('Error executing trades:', error);
-      alert('Failed to execute trades. Please try again.');
+      toast.error('Execution Failed', 'Failed to execute trades. Please try again.');
     } finally {
       setExecuting(false);
     }
