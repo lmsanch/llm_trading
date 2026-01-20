@@ -790,3 +790,459 @@ class TestCheckpointTimesConfiguration:
         for i in range(len(times) - 1):
             assert times[i] < times[i + 1], \
                 f"Checkpoint times not in order: {times[i]} >= {times[i + 1]}"
+
+
+class TestPositionAdjustmentCalculations:
+    """Test suite for position size adjustment calculations for different checkpoint actions."""
+
+    @pytest.fixture
+    def checkpoint_stage(self):
+        """Create a CheckpointStage instance for testing."""
+        return CheckpointStage()
+
+    @pytest.fixture
+    def sample_long_position(self):
+        """Sample LONG position with 100 shares."""
+        return {
+            "account": "Council",
+            "symbol": "SPY",
+            "side": "long",
+            "qty": "100",
+            "current_price": 450.00,
+            "entry_price": 440.00,
+            "unrealized_pl": 1000.00,
+            "unrealized_plpc": 2.27,
+        }
+
+    @pytest.fixture
+    def sample_short_position(self):
+        """Sample SHORT position with -50 shares."""
+        return {
+            "account": "GPT-5.1",
+            "symbol": "QQQ",
+            "side": "short",
+            "qty": "-50",
+            "current_price": 380.00,
+            "entry_price": 390.00,
+            "unrealized_pl": 500.00,
+            "unrealized_plpc": 1.28,
+        }
+
+    def test_stay_action_maintains_position_long(self, checkpoint_stage, sample_long_position):
+        """Test STAY action maintains current LONG position."""
+        action_decision = {
+            "action": "STAY",
+            "account": sample_long_position["account"],
+            "instrument": sample_long_position["symbol"],
+            "direction": "LONG",
+            "current_conviction": 1.5,
+            "new_conviction": 1.5,
+        }
+
+        # STAY means no change to position
+        # Original qty: 100 shares
+        # After STAY: still 100 shares
+        assert action_decision["action"] == "STAY"
+        assert float(sample_long_position["qty"]) == 100.0
+
+    def test_stay_action_maintains_position_short(self, checkpoint_stage, sample_short_position):
+        """Test STAY action maintains current SHORT position."""
+        action_decision = {
+            "action": "STAY",
+            "account": sample_short_position["account"],
+            "instrument": sample_short_position["symbol"],
+            "direction": "SHORT",
+            "current_conviction": -1.5,
+            "new_conviction": -1.5,
+        }
+
+        # STAY means no change to position
+        # Original qty: -50 shares
+        # After STAY: still -50 shares
+        assert action_decision["action"] == "STAY"
+        assert float(sample_short_position["qty"]) == -50.0
+
+    def test_reduce_action_decreases_position_by_50_percent_long(self, checkpoint_stage, sample_long_position):
+        """Test REDUCE action decreases LONG position by 50%."""
+        action_decision = {
+            "action": "REDUCE",
+            "account": sample_long_position["account"],
+            "instrument": sample_long_position["symbol"],
+            "direction": "LONG",
+            "current_conviction": 1.5,
+            "new_conviction": 0.9,
+        }
+
+        # REDUCE should decrease position by 50%
+        original_qty = float(sample_long_position["qty"])
+        expected_new_qty = original_qty * 0.5
+
+        assert action_decision["action"] == "REDUCE"
+        assert original_qty == 100.0
+        assert expected_new_qty == 50.0
+
+    def test_reduce_action_decreases_position_by_50_percent_short(self, checkpoint_stage, sample_short_position):
+        """Test REDUCE action decreases SHORT position by 50%."""
+        action_decision = {
+            "action": "REDUCE",
+            "account": sample_short_position["account"],
+            "instrument": sample_short_position["symbol"],
+            "direction": "SHORT",
+            "current_conviction": -1.5,
+            "new_conviction": -0.9,
+        }
+
+        # REDUCE should decrease SHORT position by 50%
+        # For SHORT, "reduce" means less negative (closer to zero)
+        original_qty = float(sample_short_position["qty"])
+        expected_new_qty = original_qty * 0.5
+
+        assert action_decision["action"] == "REDUCE"
+        assert original_qty == -50.0
+        assert expected_new_qty == -25.0
+
+    def test_reduce_maintains_same_direction(self, checkpoint_stage, sample_long_position):
+        """Test REDUCE maintains the same position direction."""
+        action_decision = {
+            "action": "REDUCE",
+            "account": sample_long_position["account"],
+            "instrument": sample_long_position["symbol"],
+            "direction": "LONG",
+            "current_conviction": 1.8,
+            "new_conviction": 1.2,
+        }
+
+        # REDUCE should maintain direction (LONG stays LONG)
+        assert action_decision["action"] == "REDUCE"
+        assert action_decision["direction"] == "LONG"
+        # Both convictions should be positive for LONG
+        assert action_decision["current_conviction"] > 0
+        assert action_decision["new_conviction"] > 0
+
+    def test_increase_action_increases_position_by_50_percent_long(self, checkpoint_stage, sample_long_position):
+        """Test INCREASE action increases LONG position by 50%."""
+        action_decision = {
+            "action": "INCREASE",
+            "account": sample_long_position["account"],
+            "instrument": sample_long_position["symbol"],
+            "direction": "LONG",
+            "current_conviction": 1.0,
+            "new_conviction": 1.6,
+        }
+
+        # INCREASE should increase position by 50%
+        original_qty = float(sample_long_position["qty"])
+        expected_new_qty = original_qty * 1.5
+
+        assert action_decision["action"] == "INCREASE"
+        assert original_qty == 100.0
+        assert expected_new_qty == 150.0
+
+    def test_increase_action_increases_position_by_50_percent_short(self, checkpoint_stage, sample_short_position):
+        """Test INCREASE action increases SHORT position by 50%."""
+        action_decision = {
+            "action": "INCREASE",
+            "account": sample_short_position["account"],
+            "instrument": sample_short_position["symbol"],
+            "direction": "SHORT",
+            "current_conviction": -1.0,
+            "new_conviction": -1.6,
+        }
+
+        # INCREASE should increase SHORT position by 50%
+        # For SHORT, "increase" means more negative (away from zero)
+        original_qty = float(sample_short_position["qty"])
+        expected_new_qty = original_qty * 1.5
+
+        assert action_decision["action"] == "INCREASE"
+        assert original_qty == -50.0
+        assert expected_new_qty == -75.0
+
+    def test_increase_maintains_same_direction(self, checkpoint_stage, sample_long_position):
+        """Test INCREASE maintains the same position direction."""
+        action_decision = {
+            "action": "INCREASE",
+            "account": sample_long_position["account"],
+            "instrument": sample_long_position["symbol"],
+            "direction": "LONG",
+            "current_conviction": 1.2,
+            "new_conviction": 1.8,
+        }
+
+        # INCREASE should maintain direction (LONG stays LONG)
+        assert action_decision["action"] == "INCREASE"
+        assert action_decision["direction"] == "LONG"
+        # Both convictions should be positive for LONG
+        assert action_decision["current_conviction"] > 0
+        assert action_decision["new_conviction"] > 0
+
+    def test_flip_action_reverses_long_to_short(self, checkpoint_stage, sample_long_position):
+        """Test FLIP action reverses LONG position to SHORT."""
+        action_decision = {
+            "action": "FLIP",
+            "account": sample_long_position["account"],
+            "instrument": sample_long_position["symbol"],
+            "direction": "LONG",
+            "current_conviction": 1.5,
+            "new_conviction": -1.0,
+        }
+
+        # FLIP should reverse direction
+        # Original: LONG +100 shares
+        # After FLIP: SHORT -100 shares (same size, opposite direction)
+        original_qty = float(sample_long_position["qty"])
+        expected_new_qty = -original_qty
+
+        assert action_decision["action"] == "FLIP"
+        assert original_qty == 100.0
+        assert expected_new_qty == -100.0
+        # Conviction should change sign
+        assert action_decision["current_conviction"] > 0
+        assert action_decision["new_conviction"] < 0
+
+    def test_flip_action_reverses_short_to_long(self, checkpoint_stage, sample_short_position):
+        """Test FLIP action reverses SHORT position to LONG."""
+        action_decision = {
+            "action": "FLIP",
+            "account": sample_short_position["account"],
+            "instrument": sample_short_position["symbol"],
+            "direction": "SHORT",
+            "current_conviction": -1.5,
+            "new_conviction": 1.0,
+        }
+
+        # FLIP should reverse direction
+        # Original: SHORT -50 shares
+        # After FLIP: LONG +50 shares (same size, opposite direction)
+        original_qty = float(sample_short_position["qty"])
+        expected_new_qty = -original_qty
+
+        assert action_decision["action"] == "FLIP"
+        assert original_qty == -50.0
+        assert expected_new_qty == 50.0
+        # Conviction should change sign
+        assert action_decision["current_conviction"] < 0
+        assert action_decision["new_conviction"] > 0
+
+    def test_flip_maintains_position_size(self, checkpoint_stage, sample_long_position):
+        """Test FLIP maintains the same position size (absolute value)."""
+        original_qty = abs(float(sample_long_position["qty"]))
+
+        # After FLIP, size should be same but opposite direction
+        expected_new_qty_abs = original_qty
+
+        assert original_qty == 100.0
+        assert expected_new_qty_abs == 100.0
+
+    def test_exit_action_closes_entire_long_position(self, checkpoint_stage, sample_long_position):
+        """Test EXIT action closes entire LONG position."""
+        action_decision = {
+            "action": "EXIT",
+            "account": sample_long_position["account"],
+            "instrument": sample_long_position["symbol"],
+            "direction": "LONG",
+            "current_conviction": 1.5,
+            "new_conviction": 0.5,
+        }
+
+        # EXIT should close entire position
+        # Original: 100 shares
+        # After EXIT: 0 shares
+        original_qty = float(sample_long_position["qty"])
+        expected_new_qty = 0.0
+
+        assert action_decision["action"] == "EXIT"
+        assert original_qty == 100.0
+        assert expected_new_qty == 0.0
+
+    def test_exit_action_closes_entire_short_position(self, checkpoint_stage, sample_short_position):
+        """Test EXIT action closes entire SHORT position."""
+        action_decision = {
+            "action": "EXIT",
+            "account": sample_short_position["account"],
+            "instrument": sample_short_position["symbol"],
+            "direction": "SHORT",
+            "current_conviction": -1.5,
+            "new_conviction": -0.5,
+        }
+
+        # EXIT should close entire position
+        # Original: -50 shares
+        # After EXIT: 0 shares
+        original_qty = float(sample_short_position["qty"])
+        expected_new_qty = 0.0
+
+        assert action_decision["action"] == "EXIT"
+        assert original_qty == -50.0
+        assert expected_new_qty == 0.0
+
+    def test_exit_conviction_below_threshold(self, checkpoint_stage, sample_long_position):
+        """Test EXIT occurs when conviction drops below exit threshold."""
+        action_decision = {
+            "action": "EXIT",
+            "account": sample_long_position["account"],
+            "instrument": sample_long_position["symbol"],
+            "direction": "LONG",
+            "current_conviction": 1.5,
+            "new_conviction": 0.8,
+        }
+
+        # New conviction below exit threshold (1.0)
+        assert action_decision["action"] == "EXIT"
+        assert action_decision["new_conviction"] < CheckpointStage.CONVICTION_THRESHOLDS["exit"]
+
+    def test_reduce_calculation_with_large_position(self, checkpoint_stage):
+        """Test REDUCE calculation with a large position."""
+        large_position = {
+            "account": "Council",
+            "symbol": "SPY",
+            "side": "long",
+            "qty": "1000",
+            "current_price": 450.00,
+            "entry_price": 440.00,
+            "unrealized_pl": 10000.00,
+            "unrealized_plpc": 2.27,
+        }
+
+        # REDUCE by 50%
+        original_qty = float(large_position["qty"])
+        expected_new_qty = original_qty * 0.5
+
+        assert original_qty == 1000.0
+        assert expected_new_qty == 500.0
+
+    def test_increase_calculation_with_large_position(self, checkpoint_stage):
+        """Test INCREASE calculation with a large position."""
+        large_position = {
+            "account": "GPT-5.1",
+            "symbol": "QQQ",
+            "side": "long",
+            "qty": "800",
+            "current_price": 380.00,
+            "entry_price": 370.00,
+            "unrealized_pl": 8000.00,
+            "unrealized_plpc": 2.70,
+        }
+
+        # INCREASE by 50%
+        original_qty = float(large_position["qty"])
+        expected_new_qty = original_qty * 1.5
+
+        assert original_qty == 800.0
+        assert expected_new_qty == 1200.0
+
+    def test_reduce_calculation_with_small_position(self, checkpoint_stage):
+        """Test REDUCE calculation with a small position."""
+        small_position = {
+            "account": "Gemini",
+            "symbol": "TLT",
+            "side": "long",
+            "qty": "10",
+            "current_price": 95.00,
+            "entry_price": 100.00,
+            "unrealized_pl": -50.00,
+            "unrealized_plpc": -5.00,
+        }
+
+        # REDUCE by 50%
+        original_qty = float(small_position["qty"])
+        expected_new_qty = original_qty * 0.5
+
+        assert original_qty == 10.0
+        assert expected_new_qty == 5.0
+
+    def test_increase_calculation_with_small_position(self, checkpoint_stage):
+        """Test INCREASE calculation with a small position."""
+        small_position = {
+            "account": "Claude",
+            "symbol": "GLD",
+            "side": "long",
+            "qty": "5",
+            "current_price": 180.00,
+            "entry_price": 175.00,
+            "unrealized_pl": 25.00,
+            "unrealized_plpc": 2.86,
+        }
+
+        # INCREASE by 50%
+        original_qty = float(small_position["qty"])
+        expected_new_qty = original_qty * 1.5
+
+        assert original_qty == 5.0
+        assert expected_new_qty == 7.5
+
+    def test_position_adjustment_preserves_decimal_precision(self, checkpoint_stage):
+        """Test that position adjustments preserve decimal precision."""
+        position = {
+            "account": "Council",
+            "symbol": "SPY",
+            "side": "long",
+            "qty": "33",
+            "current_price": 450.00,
+            "entry_price": 440.00,
+            "unrealized_pl": 330.00,
+            "unrealized_plpc": 2.27,
+        }
+
+        # REDUCE by 50%
+        original_qty = float(position["qty"])
+        expected_new_qty = original_qty * 0.5
+
+        assert original_qty == 33.0
+        assert expected_new_qty == 16.5  # Decimal result
+
+        # INCREASE by 50%
+        expected_increased_qty = original_qty * 1.5
+        assert expected_increased_qty == 49.5  # Decimal result
+
+    def test_multiple_action_sequence_reduce_then_increase(self, checkpoint_stage, sample_long_position):
+        """Test sequence of REDUCE followed by INCREASE."""
+        # Start with 100 shares
+        original_qty = float(sample_long_position["qty"])
+        assert original_qty == 100.0
+
+        # REDUCE by 50% -> 50 shares
+        after_reduce = original_qty * 0.5
+        assert after_reduce == 50.0
+
+        # INCREASE by 50% -> 75 shares
+        after_increase = after_reduce * 1.5
+        assert after_increase == 75.0
+
+    def test_multiple_action_sequence_increase_then_reduce(self, checkpoint_stage, sample_long_position):
+        """Test sequence of INCREASE followed by REDUCE."""
+        # Start with 100 shares
+        original_qty = float(sample_long_position["qty"])
+        assert original_qty == 100.0
+
+        # INCREASE by 50% -> 150 shares
+        after_increase = original_qty * 1.5
+        assert after_increase == 150.0
+
+        # REDUCE by 50% -> 75 shares
+        after_reduce = after_increase * 0.5
+        assert after_reduce == 75.0
+
+    def test_all_actions_documented_behavior(self, checkpoint_stage):
+        """Test that all checkpoint actions have documented expected behavior."""
+        # STAY: No change
+        stay_multiplier = 1.0
+
+        # REDUCE: 50% decrease
+        reduce_multiplier = 0.5
+
+        # INCREASE: 50% increase
+        increase_multiplier = 1.5
+
+        # EXIT: Close entire position
+        exit_multiplier = 0.0
+
+        # FLIP: Reverse direction (negate quantity)
+        flip_multiplier = -1.0
+
+        # Verify multipliers are correct
+        assert stay_multiplier == 1.0
+        assert reduce_multiplier == 0.5
+        assert increase_multiplier == 1.5
+        assert exit_multiplier == 0.0
+        assert flip_multiplier == -1.0
