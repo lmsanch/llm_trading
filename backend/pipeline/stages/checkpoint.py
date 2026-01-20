@@ -138,11 +138,14 @@ class CheckpointStage(Stage):
         all_positions = []
         for account_name, positions in positions_data.items():
             for position in positions:
+                symbol = position.get("symbol")
                 all_positions.append({
                     "account": account_name,
-                    "symbol": position.get("symbol"),
+                    "symbol": symbol,
+                    "instrument": symbol,  # Alias for use in prompts
                     "qty": position.get("qty"),
                     "side": "long" if float(position.get("qty", 0)) > 0 else "short",
+                    "direction": ("LONG" if float(position.get("qty", 0)) > 0 else "SHORT"),  # Uppercase direction
                     "current_price": float(position.get("current_price", 0)),
                     "cost_basis": float(position.get("cost_basis", 0)),
                     "market_value": float(position.get("market_value", 0)),
