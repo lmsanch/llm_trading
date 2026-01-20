@@ -45,6 +45,110 @@ function ActivityIcon(props) {
   );
 }
 
+function ResearchPreviewSkeleton() {
+  return (
+    <Card className="flex flex-col animate-pulse">
+      <CardHeader className="pb-3 border-b">
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 bg-muted rounded" />
+              <div className="h-4 w-40 bg-muted rounded" />
+            </div>
+            <div className="h-3 w-60 bg-muted rounded" />
+          </div>
+          <div className="w-12 h-4 bg-muted rounded" />
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4 pt-4">
+        {/* Full Report Button Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-muted rounded" />
+            <div className="h-4 w-20 bg-muted rounded" />
+          </div>
+          <div className="w-4 h-4 bg-muted rounded" />
+        </div>
+
+        {/* Macro Regime Skeleton */}
+        <div className="space-y-2 border-t pt-4">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-muted rounded" />
+            <div className="h-4 w-28 bg-muted rounded" />
+          </div>
+          <div className="bg-muted/50 p-3 rounded-md border space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="h-4 w-20 bg-muted rounded" />
+              <div className="h-5 w-24 bg-muted rounded" />
+            </div>
+            <div className="space-y-1">
+              <div className="h-3 w-full bg-muted rounded" />
+              <div className="h-3 w-5/6 bg-muted rounded" />
+            </div>
+          </div>
+        </div>
+
+        {/* Top Narratives Skeleton */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-muted rounded" />
+            <div className="h-4 w-28 bg-muted rounded" />
+          </div>
+          <div className="bg-muted/30 p-2 rounded-md border space-y-2">
+            <div className="h-3 w-full bg-muted rounded" />
+            <div className="h-3 w-4/5 bg-muted rounded" />
+            <div className="h-3 w-5/6 bg-muted rounded" />
+          </div>
+        </div>
+
+        {/* Tradable Candidates Skeleton */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-muted rounded" />
+            <div className="h-4 w-36 bg-muted rounded" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-6 w-16 bg-muted rounded" />
+            ))}
+          </div>
+        </div>
+
+        {/* Event Calendar Skeleton */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-muted rounded" />
+            <div className="h-4 w-28 bg-muted rounded" />
+          </div>
+          <div className="bg-muted/30 p-2 rounded-md border space-y-1">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex justify-between items-center py-1">
+                <div className="h-3 w-20 bg-muted rounded" />
+                <div className="h-3 w-32 bg-muted rounded" />
+                <div className="h-4 w-12 bg-muted rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Confidence Notes Skeleton */}
+        <div className="space-y-2 border-t pt-4">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-muted rounded" />
+            <div className="h-4 w-40 bg-muted rounded" />
+          </div>
+          <div className="bg-yellow-500/5 border border-yellow-500/20 p-3 rounded-md space-y-2">
+            <div className="h-3 w-32 bg-muted rounded" />
+            <div className="h-3 w-full bg-muted rounded" />
+            <div className="h-3 w-4/5 bg-muted rounded" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ResearchPreview({ data }) {
   const [showFullReport, setShowFullReport] = useState(false);
 
@@ -62,7 +166,7 @@ function ResearchPreview({ data }) {
               Latest Research Report
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              {data.created_at ? `Date: ${new Date(data.created_at).toLocaleString('en-US', { 
+              {data.created_at ? `Date: ${new Date(data.created_at).toLocaleString('en-US', {
                 timeZone: 'America/New_York',
                 year: 'numeric',
                 month: '2-digit',
@@ -658,7 +762,7 @@ export default function PMsTab() {
   const renderDataPackage = () => (
     <div className="space-y-6 mb-6">
       {/* Research Report */}
-      {latestReport && <ResearchPreview data={latestReport} />}
+      {latestReport ? <ResearchPreview data={latestReport} /> : <ResearchPreviewSkeleton />}
 
       {/* Knowledge Graph */}
       {latestReport && latestReport.structured_json && latestReport.structured_json.weekly_graph && (
