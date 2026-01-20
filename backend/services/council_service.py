@@ -172,7 +172,7 @@ class CouncilService:
                     label_to_model = context.data.get("label_to_model", {})
 
                     # Save peer reviews
-                    db_save_peer_reviews(
+                    await db_save_peer_reviews(
                         week_id=week_id,
                         peer_reviews=peer_reviews,
                         research_date=research_date,
@@ -182,7 +182,7 @@ class CouncilService:
                     logger.info(f"Saved {len(peer_reviews)} peer reviews to database")
 
                     # Save chairman decision
-                    db_save_chairman_decision(
+                    await db_save_chairman_decision(
                         week_id=week_id,
                         chairman_decision=chairman_decision,
                         research_date=research_date,

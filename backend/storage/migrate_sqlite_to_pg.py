@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
 Migrate market data from SQLite to PostgreSQL.
+
+NOTE: This migration script intentionally uses psycopg2 instead of asyncpg.
+Migration scripts are one-off operations that don't benefit from connection pooling
+and don't need to be async. Keeping psycopg2 for migrations is an acceptable use case.
 """
 
 import sqlite3

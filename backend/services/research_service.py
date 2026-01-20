@@ -91,7 +91,7 @@ class ResearchService:
             logger.error(f"Error reading research prompt: {e}")
             raise
 
-    def get_latest_research(self) -> Dict[str, Any]:
+    async def get_latest_research(self) -> Dict[str, Any]:
         """
         Get the latest complete research report from database.
 
@@ -114,12 +114,12 @@ class ResearchService:
             - research_reports: Contains research report data
         """
         try:
-            return db_get_latest_research()
+            return await db_get_latest_research()
         except Exception as e:
             logger.error(f"Error in get_latest_research: {e}")
             return {}
 
-    def get_research_by_id(self, report_id: str) -> Optional[Dict[str, Any]]:
+    async def get_research_by_id(self, report_id: str) -> Optional[Dict[str, Any]]:
         """
         Get a specific research report by ID.
 
@@ -133,12 +133,12 @@ class ResearchService:
             - research_reports: Contains research report data
         """
         try:
-            return db_get_research_by_id(report_id)
+            return await db_get_research_by_id(report_id)
         except Exception as e:
             logger.error(f"Error in get_research_by_id for {report_id}: {e}")
             return None
 
-    def get_research_history(self, days: int = 90) -> Dict[str, Any]:
+    async def get_research_history(self, days: int = 90) -> Dict[str, Any]:
         """
         Get research history grouped by date and provider.
 
@@ -158,7 +158,7 @@ class ResearchService:
             - research_reports: Contains research report data
         """
         try:
-            return db_get_research_history(days)
+            return await db_get_research_history(days)
         except Exception as e:
             logger.error(f"Error in get_research_history: {e}")
             return {"history": {}, "days": days, "error": str(e)}
@@ -296,7 +296,7 @@ class ResearchService:
             logger.error(f"Error verifying research {research_id}: {e}")
             raise
 
-    def get_latest_graphs(self) -> Dict[str, Any]:
+    async def get_latest_graphs(self) -> Dict[str, Any]:
         """
         Get the latest knowledge graphs from database.
 
@@ -312,7 +312,7 @@ class ResearchService:
             - research_reports: Contains research report data with structured_json
         """
         try:
-            report = self.get_latest_research()
+            report = await self.get_latest_research()
 
             if report and report.get("structured_json"):
                 return {
@@ -345,7 +345,7 @@ class ResearchService:
 
             market_service = MarketService()
 
-            research = self.get_latest_research()
+            research = await self.get_latest_research()
             metrics = await market_service.get_market_metrics()
             prices = await market_service.get_current_prices()
 

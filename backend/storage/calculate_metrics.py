@@ -7,6 +7,16 @@ Calculations:
 2. 7-day log returns: ln(close_t / close_t-7)
 3. 30-day rolling correlation matrix of 7-day log returns
 
+ASYNC PATTERNS USED:
+    This module demonstrates batch operations with asyncpg connection pool.
+    See backend/db/ASYNC_PATTERNS.md for complete documentation.
+
+    Key patterns:
+    - Batch inserts use conn.executemany() for performance
+    - Connection pool is acquired with 'async with pool.acquire()'
+    - All database operations use 'await'
+    - Parameter placeholders use $1, $2, $3 (not %s)
+
 Usage:
     python calculate_metrics.py          # Calculate all metrics
     python calculate_metrics.py --backfill  # Backfill historical metrics
@@ -17,14 +27,15 @@ import sys
 from pathlib import Path
 from datetime import datetime
 import argparse
+import asyncio
 import numpy as np
 import pandas as pd
-import psycopg2
-from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from backend.db.pool import get_pool, init_pool, close_pool
 
 load_dotenv()
 
@@ -48,26 +59,13 @@ CORRELATION_WINDOW = 30
 # ============================================================================
 
 class MetricsDB:
-    """PostgreSQL database manager for metrics."""
+    """PostgreSQL database manager for metrics using async connection pool."""
 
     def __init__(self):
-        self.conn = None
+        # No longer stores connection - uses pool from get_pool()
+        pass
 
-    def connect(self):
-        """Connect to PostgreSQL database using peer authentication."""
-        self.conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER
-        )
-        print(f"✅ Connected to database: {DB_NAME}")
-
-    def close(self):
-        """Close database connection."""
-        if self.conn:
-            self.conn.close()
-            print("✅ Database connection closed")
-
-    def load_daily_bars(self) -> pd.DataFrame:
+    async def load_daily_bars(self) -> pd.DataFrame:
         """
         Load all daily bars from database into pandas DataFrame.
 
@@ -79,11 +77,27 @@ class MetricsDB:
             FROM daily_bars
             ORDER BY symbol, date
         """
-        df = pd.read_sql_query(query, self.conn, parse_dates=['date'])
-        print(f"📊 Loaded {len(df)} daily bars from database")
-        return df
+        # ASYNC PATTERN: Direct pool usage (advanced)
+        # - Use when you need fine-grained control over connection
+        # - get_pool() returns the global connection pool singleton
+        # - 'async with pool.acquire()' automatically gets/releases connection
+        # - Connection is returned to pool on exit (even on exception)
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            # ASYNC PATTERN: Use await with conn.fetch()
+            # - conn.fetch() returns all rows as list of Record objects
+            # - Records are dict-like: access with row["column_name"]
+            rows = await conn.fetch(query)
+            # Convert to list of dicts for DataFrame
+            data = [dict(row) for row in rows]
+            df = pd.DataFrame(data)
+            # Ensure date column is datetime
+            if not df.empty:
+                df['date'] = pd.to_datetime(df['date'])
+            print(f"📊 Loaded {len(df)} daily bars from database")
+            return df
 
-    def upsert_daily_log_returns(self, df: pd.DataFrame):
+    async def upsert_daily_log_returns(self, df: pd.DataFrame):
         """
         Upsert daily log returns to database.
 
@@ -94,29 +108,36 @@ class MetricsDB:
             print("  ⚠️  No daily log returns to insert")
             return
 
-        # Prepare data for bulk insert
+        # ASYNC PATTERN: Batch operations (efficient bulk insert)
+        # - Prepare list of tuples for executemany()
+        # - Each tuple contains parameters for one row ($1, $2, $3)
+        # - Much faster than calling execute() in a loop (single transaction)
+        # - For 100 rows: 1 round-trip vs 100 round-trips
         data = [
             (row['symbol'], row['date'], float(row['log_return']) if pd.notna(row['log_return']) else None)
             for _, row in df.iterrows()
         ]
 
-        with self.conn.cursor() as cur:
-            execute_values(
-                cur,
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            # ASYNC PATTERN: Use await with conn.executemany() for batch operations
+            # - executemany() runs all operations in a single transaction
+            # - All rows succeed or all fail (atomic)
+            # - 10-100x faster than individual execute() calls
+            # - Use $1, $2, $3 placeholders (not %s, %s, %s)
+            await conn.executemany(
                 """
                 INSERT INTO daily_log_returns (symbol, date, log_return)
-                VALUES %s
+                VALUES ($1, $2, $3)
                 ON CONFLICT (symbol, date) DO UPDATE SET
                     log_return = EXCLUDED.log_return,
                     created_at = NOW()
                 """,
-                data,
-                template="(%s, %s, %s)"
+                data
             )
-        self.conn.commit()
         print(f"  ✅ Upserted {len(df)} daily log returns")
 
-    def upsert_7day_log_returns(self, df: pd.DataFrame):
+    async def upsert_7day_log_returns(self, df: pd.DataFrame):
         """
         Upsert 7-day log returns to database.
 
@@ -133,23 +154,21 @@ class MetricsDB:
             for _, row in df.iterrows()
         ]
 
-        with self.conn.cursor() as cur:
-            execute_values(
-                cur,
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            await conn.executemany(
                 """
                 INSERT INTO rolling_7day_log_returns (symbol, date, log_return_7d)
-                VALUES %s
+                VALUES ($1, $2, $3)
                 ON CONFLICT (symbol, date) DO UPDATE SET
                     log_return_7d = EXCLUDED.log_return_7d,
                     created_at = NOW()
                 """,
-                data,
-                template="(%s, %s, %s)"
+                data
             )
-        self.conn.commit()
         print(f"  ✅ Upserted {len(df)} 7-day log returns")
 
-    def upsert_correlation_matrix(self, df: pd.DataFrame):
+    async def upsert_correlation_matrix(self, df: pd.DataFrame):
         """
         Upsert correlation matrix to database.
 
@@ -166,20 +185,18 @@ class MetricsDB:
             for _, row in df.iterrows()
         ]
 
-        with self.conn.cursor() as cur:
-            execute_values(
-                cur,
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            await conn.executemany(
                 """
                 INSERT INTO correlation_matrix (date, symbol_1, symbol_2, correlation)
-                VALUES %s
+                VALUES ($1, $2, $3, $4)
                 ON CONFLICT (date, symbol_1, symbol_2) DO UPDATE SET
                     correlation = EXCLUDED.correlation,
                     created_at = NOW()
                 """,
-                data,
-                template="(%s, %s, %s, %s)"
+                data
             )
-        self.conn.commit()
         print(f"  ✅ Upserted {len(df)} correlation pairs")
 
 
@@ -290,7 +307,7 @@ class MetricsCalculator:
         print(f"  ✅ Calculated {len(result)} correlation pairs ({len(result) // (len(INSTRUMENTS) ** 2)} dates)")
         return result
 
-    def run_all_calculations(self, backfill: bool = False):
+    async def run_all_calculations(self, backfill: bool = False):
         """
         Run all metric calculations and store in database.
 
@@ -300,29 +317,25 @@ class MetricsCalculator:
         print("\n🚀 Starting metrics calculation...")
         print("=" * 60)
 
-        self.db.connect()
-
         # Load daily bars
-        daily_bars = self.db.load_daily_bars()
+        daily_bars = await self.db.load_daily_bars()
 
         if daily_bars.empty:
             print("❌ No daily bars found in database. Run fetch_market_data.py first.")
-            self.db.close()
             return
 
         # 1. Calculate daily log returns
         daily_log_returns = self.calculate_daily_log_returns(daily_bars)
-        self.db.upsert_daily_log_returns(daily_log_returns)
+        await self.db.upsert_daily_log_returns(daily_log_returns)
 
         # 2. Calculate 7-day log returns
         log_returns_7d = self.calculate_7day_log_returns(daily_bars)
-        self.db.upsert_7day_log_returns(log_returns_7d)
+        await self.db.upsert_7day_log_returns(log_returns_7d)
 
         # 3. Calculate correlation matrix
         correlation_matrix = self.calculate_correlation_matrix(log_returns_7d, window=CORRELATION_WINDOW)
-        self.db.upsert_correlation_matrix(correlation_matrix)
+        await self.db.upsert_correlation_matrix(correlation_matrix)
 
-        self.db.close()
         print("\n✅ All metrics calculated and stored successfully")
 
 
@@ -330,7 +343,7 @@ class MetricsCalculator:
 # MAIN
 # ============================================================================
 
-def main():
+async def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
         description="Calculate market metrics using pandas",
@@ -345,9 +358,16 @@ def main():
 
     args = parser.parse_args()
 
-    calculator = MetricsCalculator()
-    calculator.run_all_calculations(backfill=args.backfill)
+    # Initialize database connection pool
+    await init_pool()
+
+    try:
+        calculator = MetricsCalculator()
+        await calculator.run_all_calculations(backfill=args.backfill)
+    finally:
+        # Close database connection pool
+        await close_pool()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

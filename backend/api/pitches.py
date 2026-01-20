@@ -144,7 +144,7 @@ async def get_current_pitches(
     """
     try:
         # Try to get pitches from database first
-        pitches = pitch_service.get_current_pitches(
+        pitches = await pitch_service.get_current_pitches(
             week_id=week_id,
             research_date=research_date
         )
@@ -369,7 +369,7 @@ async def approve_pitch(id: int) -> Dict[str, Any]:
     try:
         pipeline_state = get_pipeline_state()
 
-        result = pitch_service.approve_pitch(
+        result = await pitch_service.approve_pitch(
             pitch_id=id,
             pipeline_state=pipeline_state
         )

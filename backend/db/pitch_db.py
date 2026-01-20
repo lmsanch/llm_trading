@@ -1,16 +1,29 @@
-"""PM pitch database operations."""
+"""PM pitch database operations.
+
+ASYNC PATTERNS USED:
+    This module demonstrates JSONB handling with asyncpg.
+    See backend/db/ASYNC_PATTERNS.md for complete documentation.
+
+    Key patterns:
+    - JSONB columns: Pass dicts directly (no Json() wrapper needed)
+    - Complete async chain: API → Service → DB → Pool
+    - All functions are async and use await
+    - Parameter placeholders use $1, $2, $3 (not %s)
+    - Row access uses dict keys (not numeric indices)
+"""
 
 import json
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 
-from backend.db.database import DatabaseConnection
+# Import async database helpers
+from backend.db_helpers import fetch_one, fetch_all, fetch_val, execute
 
 logger = logging.getLogger(__name__)
 
 
-def save_pitches(
+async def save_pitches(
     week_id: str,
     pitches_raw: List[Dict[str, Any]],
     research_date: Optional[str] = None
@@ -46,61 +59,62 @@ def save_pitches(
         Exception: If database operation fails (logged but not raised)
     """
     try:
-        with DatabaseConnection() as conn:
-            with conn.cursor() as cur:
-                logger.info(
-                    f"Saving {len(pitches_raw)} pitches to DB for week {week_id}"
+        logger.info(
+            f"Saving {len(pitches_raw)} pitches to DB for week {week_id}"
+        )
+
+        for pitch in pitches_raw:
+            model = pitch.get("model", "unknown")
+            account = pitch.get("model_info", {}).get("account", "UNKNOWN")
+
+            # Ensure timestamp exists
+            if "timestamp" not in pitch:
+                pitch["timestamp"] = datetime.utcnow().isoformat()
+
+            # Delete existing pitch for this model/research_date to allow re-runs
+            # Match by research_date and model to avoid deleting pitches from other research dates
+            if research_date:
+                await execute(
+                    "DELETE FROM pm_pitches WHERE research_date = $1 AND model = $2",
+                    research_date, model
+                )
+            else:
+                # Fallback to week_id if research_date not provided
+                await execute(
+                    "DELETE FROM pm_pitches WHERE week_id = $1 AND model = $2",
+                    week_id, model
                 )
 
-                for pitch in pitches_raw:
-                    model = pitch.get("model", "unknown")
-                    account = pitch.get("model_info", {}).get("account", "UNKNOWN")
+            # ASYNC PATTERN: Execute INSERT with await
+            # - execute() automatically uses connection pool
+            # - Parameters use $1, $2, $3 placeholders (not %s)
+            # - JSONB column (pitch_data): json.dumps() for text storage
+            #   (In pure JSONB columns, you can pass dict directly without json.dumps)
+            # - All operations are async and non-blocking
+            await execute(
+                """
+                INSERT INTO pm_pitches
+                (week_id, model, account, pitch_data, instrument, direction, conviction, research_date, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                """,
+                week_id,
+                model,
+                account,
+                json.dumps(pitch),  # TEXT column, so we use json.dumps()
+                pitch.get("selected_instrument") or pitch.get("instrument"),
+                pitch.get("direction"),
+                float(pitch.get("conviction", 0)),
+                research_date
+            )
 
-                    # Ensure timestamp exists
-                    if "timestamp" not in pitch:
-                        pitch["timestamp"] = datetime.utcnow().isoformat()
-
-                    # Delete existing pitch for this model/research_date to allow re-runs
-                    # Match by research_date and model to avoid deleting pitches from other research dates
-                    if research_date:
-                        cur.execute(
-                            "DELETE FROM pm_pitches WHERE research_date = %s AND model = %s",
-                            (research_date, model),
-                        )
-                    else:
-                        # Fallback to week_id if research_date not provided
-                        cur.execute(
-                            "DELETE FROM pm_pitches WHERE week_id = %s AND model = %s",
-                            (week_id, model),
-                        )
-
-                    # Insert new pitch
-                    cur.execute(
-                        """
-                        INSERT INTO pm_pitches
-                        (week_id, model, account, pitch_data, instrument, direction, conviction, research_date, created_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                        """,
-                        (
-                            week_id,
-                            model,
-                            account,
-                            json.dumps(pitch),
-                            pitch.get("selected_instrument") or pitch.get("instrument"),
-                            pitch.get("direction"),
-                            float(pitch.get("conviction", 0)),
-                            research_date,
-                        ),
-                    )
-
-                logger.info("Pitches saved to DB successfully")
+        logger.info("Pitches saved to DB successfully")
 
     except Exception as e:
         logger.error(f"Error saving pitches to DB: {e}", exc_info=True)
         raise
 
 
-def load_pitches(
+async def load_pitches(
     week_id: Optional[str] = None,
     research_date: Optional[str] = None
 ) -> List[Dict[str, Any]]:
@@ -130,66 +144,59 @@ def load_pitches(
         - If neither provided: Get latest by research_date, fall back to week_id
     """
     try:
-        with DatabaseConnection() as conn:
-            with conn.cursor() as cur:
-                if research_date:
-                    # Search by exact date and time match (YYYY-MM-DD HH:MM)
-                    # Match both date and time components
-                    query = """
-                        SELECT pitch_data, created_at, research_date
-                        FROM pm_pitches
-                        WHERE research_date::date = %s::date
-                          AND DATE_PART('hour', research_date) = DATE_PART('hour', %s::timestamptz)
-                          AND DATE_PART('minute', research_date) = DATE_PART('minute', %s::timestamptz)
-                        ORDER BY model
-                    """
-                    params = (research_date, research_date, research_date)
-                elif week_id:
-                    query = "SELECT pitch_data, created_at, research_date FROM pm_pitches WHERE week_id = %s ORDER BY model"
-                    params = (week_id,)
-                else:
-                    # Get latest by research_date if available, else by week_id
-                    # Prefer using research_date as it's more valid
-                    cur.execute(
-                        "SELECT MAX(research_date) FROM pm_pitches WHERE research_date IS NOT NULL"
-                    )
-                    latest_date = cur.fetchone()[0]
+        if research_date:
+            # Search by exact date and time match (YYYY-MM-DD HH:MM)
+            # Match both date and time components
+            query = """
+                SELECT pitch_data, created_at, research_date
+                FROM pm_pitches
+                WHERE research_date::date = $1::date
+                  AND DATE_PART('hour', research_date) = DATE_PART('hour', $2::timestamptz)
+                  AND DATE_PART('minute', research_date) = DATE_PART('minute', $3::timestamptz)
+                ORDER BY model
+            """
+            rows = await fetch_all(query, research_date, research_date, research_date)
+        elif week_id:
+            query = "SELECT pitch_data, created_at, research_date FROM pm_pitches WHERE week_id = $1 ORDER BY model"
+            rows = await fetch_all(query, week_id)
+        else:
+            # Get latest by research_date if available, else by week_id
+            # Prefer using research_date as it's more valid
+            latest_date = await fetch_val(
+                "SELECT MAX(research_date) FROM pm_pitches WHERE research_date IS NOT NULL"
+            )
 
-                    if latest_date:
-                        query = """
-                            SELECT pitch_data, created_at, research_date
-                            FROM pm_pitches
-                            WHERE research_date = %s
-                            ORDER BY model
-                        """
-                        params = (latest_date,)
-                    else:
-                        # Fallback to week_id
-                        cur.execute("SELECT MAX(week_id) FROM pm_pitches")
-                        latest_week = cur.fetchone()[0]
-                        if not latest_week:
-                            return []
-                        query = "SELECT pitch_data, created_at, research_date FROM pm_pitches WHERE week_id = %s ORDER BY model"
-                        params = (latest_week,)
-
-                cur.execute(query, params)
-                rows = cur.fetchall()
-
-                if not rows:
+            if latest_date:
+                query = """
+                    SELECT pitch_data, created_at, research_date
+                    FROM pm_pitches
+                    WHERE research_date = $1
+                    ORDER BY model
+                """
+                rows = await fetch_all(query, latest_date)
+            else:
+                # Fallback to week_id
+                latest_week = await fetch_val("SELECT MAX(week_id) FROM pm_pitches")
+                if not latest_week:
                     return []
+                query = "SELECT pitch_data, created_at, research_date FROM pm_pitches WHERE week_id = $1 ORDER BY model"
+                rows = await fetch_all(query, latest_week)
 
-                # Extract pitch data (first column is pitch_data JSON)
-                pitches = [row[0] for row in rows]
+        if not rows:
+            return []
 
-                logger.info(f"Loaded {len(pitches)} pitches from DB")
-                return pitches
+        # Extract pitch data (first column is pitch_data JSON)
+        pitches = [row["pitch_data"] for row in rows]
+
+        logger.info(f"Loaded {len(pitches)} pitches from DB")
+        return pitches
 
     except Exception as e:
         logger.error(f"Error loading pitches from DB: {e}", exc_info=True)
         return []
 
 
-def find_pitch_by_id(pitch_id: int) -> Optional[Dict[str, Any]]:
+async def find_pitch_by_id(pitch_id: int) -> Optional[Dict[str, Any]]:
     """
     Retrieve PM pitch from database by ID.
 
@@ -219,36 +226,29 @@ def find_pitch_by_id(pitch_id: int) -> Optional[Dict[str, Any]]:
         - pm_pitches: Contains PM pitch data
     """
     try:
-        with DatabaseConnection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT * FROM pm_pitches WHERE id = %s",
-                    (pitch_id,)
-                )
-                result = cur.fetchone()
+        pitch_dict = await fetch_one(
+            "SELECT * FROM pm_pitches WHERE id = $1",
+            pitch_id
+        )
 
-                if not result:
-                    return None
+        if not pitch_dict:
+            return None
 
-                # Convert to dict
-                columns = [desc[0] for desc in cur.description]
-                pitch_dict = dict(zip(columns, result))
+        # Parse JSON fields if they exist
+        if pitch_dict.get('entry_policy'):
+            try:
+                pitch_dict['entry_policy'] = json.loads(pitch_dict['entry_policy'])
+            except (json.JSONDecodeError, TypeError):
+                pass
 
-                # Parse JSON fields if they exist
-                if pitch_dict.get('entry_policy'):
-                    try:
-                        pitch_dict['entry_policy'] = json.loads(pitch_dict['entry_policy'])
-                    except (json.JSONDecodeError, TypeError):
-                        pass
+        if pitch_dict.get('exit_policy'):
+            try:
+                pitch_dict['exit_policy'] = json.loads(pitch_dict['exit_policy'])
+            except (json.JSONDecodeError, TypeError):
+                pass
 
-                if pitch_dict.get('exit_policy'):
-                    try:
-                        pitch_dict['exit_policy'] = json.loads(pitch_dict['exit_policy'])
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-
-                logger.info(f"Found pitch {pitch_id} in database")
-                return pitch_dict
+        logger.info(f"Found pitch {pitch_id} in database")
+        return pitch_dict
 
     except Exception as e:
         logger.error(f"Error fetching pitch {pitch_id}: {e}", exc_info=True)

@@ -1,14 +1,27 @@
-"""Market data database operations."""
+"""Market data database operations.
+
+ASYNC PATTERNS USED:
+    This module demonstrates the asyncpg async database patterns.
+    See backend/db/ASYNC_PATTERNS.md for complete documentation.
+
+    Key patterns:
+    - All database functions are async (use 'async def')
+    - All database calls use 'await' (don't forget!)
+    - Uses $1, $2, $3 parameter placeholders (not %s)
+    - Row access uses dict keys (not numeric indices)
+    - Connection pool is automatic (no manual connection management)
+"""
 
 import logging
 from typing import Dict, List, Optional, Any
 
-from backend.db.database import DatabaseConnection
+# Import async database helpers - these automatically use the connection pool
+from backend.db_helpers import fetch_all, fetch_val
 
 logger = logging.getLogger(__name__)
 
 
-def fetch_market_metrics() -> Optional[Dict[str, Any]]:
+async def fetch_market_metrics() -> Optional[Dict[str, Any]]:
     """
     Fetch market metrics including 7-day returns and correlation matrix.
 
@@ -28,63 +41,70 @@ def fetch_market_metrics() -> Optional[Dict[str, Any]]:
         - correlation_matrix: Contains pairwise correlations by symbol/date
     """
     try:
-        with DatabaseConnection() as conn:
-            with conn.cursor() as cur:
-                # Get latest 7-day returns
-                cur.execute("""
-                    SELECT symbol, log_return_7d
-                    FROM rolling_7day_log_returns
-                    WHERE date = (SELECT MAX(date) FROM rolling_7day_log_returns)
-                    ORDER BY log_return_7d DESC
-                """)
+        # ASYNC PATTERN: Use await with fetch_all helper
+        # - fetch_all automatically acquires connection from pool
+        # - Returns list of dicts (empty list if no rows)
+        # - Connection is automatically returned to pool after query
+        # - No parameters needed for this query (no $1, $2 placeholders)
+        returns_rows = await fetch_all("""
+            SELECT symbol, log_return_7d
+            FROM rolling_7day_log_returns
+            WHERE date = (SELECT MAX(date) FROM rolling_7day_log_returns)
+            ORDER BY log_return_7d DESC
+        """)
 
-                returns_rows = cur.fetchall()
-                returns = [
-                    {
-                        "symbol": row[0],
-                        "log_return_7d": float(row[1]),
-                        "pct_return": (float(row[1]) * 100),
-                    }
-                    for row in returns_rows
-                ]
+        # ASYNC PATTERN: Row access uses dict keys (not row[0], row[1])
+        # - asyncpg returns rows as dict-like objects
+        # - Access columns by name: row["column_name"]
+        # - This is different from psycopg2 which used numeric indices
+        returns = [
+            {
+                "symbol": row["symbol"],  # Dict access, not row[0]
+                "log_return_7d": float(row["log_return_7d"]),  # Dict access, not row[1]
+                "pct_return": (float(row["log_return_7d"]) * 100),
+            }
+            for row in returns_rows
+        ]
 
-                # Get latest correlation matrix
-                cur.execute("""
-                    SELECT symbol_1, symbol_2, correlation
-                    FROM correlation_matrix
-                    WHERE date = (SELECT MAX(date) FROM correlation_matrix)
-                    ORDER BY symbol_1, symbol_2
-                """)
+        # Get latest correlation matrix
+        corr_rows = await fetch_all("""
+            SELECT symbol_1, symbol_2, correlation
+            FROM correlation_matrix
+            WHERE date = (SELECT MAX(date) FROM correlation_matrix)
+            ORDER BY symbol_1, symbol_2
+        """)
 
-                corr_rows = cur.fetchall()
+        # Build correlation matrix as nested dict
+        correlation_matrix = {}
+        symbols = sorted(set([row["symbol_1"] for row in corr_rows]))
 
-                # Build correlation matrix as nested dict
-                correlation_matrix = {}
-                symbols = sorted(set([row[0] for row in corr_rows]))
+        for row in corr_rows:
+            symbol1 = row["symbol_1"]
+            symbol2 = row["symbol_2"]
+            corr = row["correlation"]
+            if symbol1 not in correlation_matrix:
+                correlation_matrix[symbol1] = {}
+            correlation_matrix[symbol1][symbol2] = float(corr)
 
-                for row in corr_rows:
-                    symbol1, symbol2, corr = row
-                    if symbol1 not in correlation_matrix:
-                        correlation_matrix[symbol1] = {}
-                    correlation_matrix[symbol1][symbol2] = float(corr)
+        # ASYNC PATTERN: Use await with fetch_val for single values
+        # - fetch_val returns a scalar value (not a dict or list)
+        # - Useful for COUNT, MAX, MIN, SUM, etc.
+        # - Returns None if query produces no rows
+        latest_date = await fetch_val("SELECT MAX(date) FROM rolling_7day_log_returns")
 
-                # Get the date
-                cur.execute("SELECT MAX(date) FROM rolling_7day_log_returns")
-                latest_date = cur.fetchone()[0]
-
-                return {
-                    "date": latest_date.isoformat() if latest_date else None,
-                    "returns_7d": returns,
-                    "correlation_matrix": correlation_matrix,
-                    "symbols": symbols,
-                }
+        return {
+            "date": latest_date.isoformat() if latest_date else None,
+            "returns_7d": returns,
+            "correlation_matrix": correlation_matrix,
+            "symbols": symbols,
+        }
 
     except Exception as e:
         logger.error(f"Error fetching market metrics: {e}")
         return None
 
 
-def fetch_current_prices() -> Optional[Dict[str, Any]]:
+async def fetch_current_prices() -> Optional[Dict[str, Any]]:
     """
     Fetch current prices for all tracked instruments.
 
@@ -104,49 +124,45 @@ def fetch_current_prices() -> Optional[Dict[str, Any]]:
         SPY, QQQ, IWM, TLT, HYG, UUP, GLD, USO, VIXY, SH
     """
     try:
-        with DatabaseConnection() as conn:
-            with conn.cursor() as cur:
-                # Get latest daily bars for all instruments
-                cur.execute("""
-                    WITH latest_dates AS (
-                        SELECT symbol, MAX(date) as latest_date
-                        FROM daily_bars
-                        WHERE symbol IN ('SPY', 'QQQ', 'IWM', 'TLT', 'HYG', 'UUP', 'GLD', 'USO', 'VIXY', 'SH')
-                        GROUP BY symbol
-                    )
-                    SELECT
-                        db.symbol,
-                        db.date,
-                        db.open,
-                        db.high,
-                        db.low,
-                        db.close,
-                        db.volume
-                    FROM daily_bars db
-                    INNER JOIN latest_dates ld ON db.symbol = ld.symbol AND db.date = ld.latest_date
-                    ORDER BY db.symbol
-                """)
+        # Get latest daily bars for all instruments
+        rows = await fetch_all("""
+            WITH latest_dates AS (
+                SELECT symbol, MAX(date) as latest_date
+                FROM daily_bars
+                WHERE symbol IN ('SPY', 'QQQ', 'IWM', 'TLT', 'HYG', 'UUP', 'GLD', 'USO', 'VIXY', 'SH')
+                GROUP BY symbol
+            )
+            SELECT
+                db.symbol,
+                db.date,
+                db.open,
+                db.high,
+                db.low,
+                db.close,
+                db.volume
+            FROM daily_bars db
+            INNER JOIN latest_dates ld ON db.symbol = ld.symbol AND db.date = ld.latest_date
+            ORDER BY db.symbol
+        """)
 
-                rows = cur.fetchall()
-
-                prices = []
-                for row in rows:
-                    prices.append(
-                        {
-                            "symbol": row[0],
-                            "date": row[1].isoformat() if row[1] else None,
-                            "open": float(row[2]) if row[2] else None,
-                            "high": float(row[3]) if row[3] else None,
-                            "low": float(row[4]) if row[4] else None,
-                            "close": float(row[5]) if row[5] else None,
-                            "volume": int(row[6]) if row[6] else None,
-                        }
-                    )
-
-                return {
-                    "prices": prices,
-                    "asof_date": prices[0]["date"] if prices else None,
+        prices = []
+        for row in rows:
+            prices.append(
+                {
+                    "symbol": row["symbol"],
+                    "date": row["date"].isoformat() if row["date"] else None,
+                    "open": float(row["open"]) if row["open"] else None,
+                    "high": float(row["high"]) if row["high"] else None,
+                    "low": float(row["low"]) if row["low"] else None,
+                    "close": float(row["close"]) if row["close"] else None,
+                    "volume": int(row["volume"]) if row["volume"] else None,
                 }
+            )
+
+        return {
+            "prices": prices,
+            "asof_date": prices[0]["date"] if prices else None,
+        }
 
     except Exception as e:
         logger.error(f"Error fetching current prices: {e}")

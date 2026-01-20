@@ -178,6 +178,53 @@ Week End
 
 ---
 
+## Database
+
+The application uses **PostgreSQL** with async connection pooling via **asyncpg** for high-performance database operations.
+
+### Setup
+
+```bash
+# Install PostgreSQL (if not already installed)
+brew install postgresql  # macOS
+# or
+sudo apt-get install postgresql  # Ubuntu
+
+# Create database
+createdb llm_trading
+```
+
+### Configuration
+
+Add to `.env`:
+```bash
+# Full connection string (recommended)
+DATABASE_URL=postgresql://user:pass@localhost:5432/llm_trading
+
+# Or individual components
+DATABASE_NAME=llm_trading
+DATABASE_USER=luis
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_PASSWORD=secret
+
+# Connection pool (optional, defaults shown)
+DB_MIN_POOL_SIZE=10
+DB_MAX_POOL_SIZE=50
+DB_COMMAND_TIMEOUT=60.0
+```
+
+### Performance
+
+- **2-3x faster** than synchronous psycopg2
+- **Non-blocking I/O** - doesn't block async event loop
+- **Connection pooling** - 50-90% latency reduction
+- **Automatic lifecycle** - connections managed by pool
+
+See [CLAUDE.md - Database Architecture](CLAUDE.md#database-architecture) for detailed documentation.
+
+---
+
 ## Environment Variables
 
 ```bash
@@ -185,6 +232,9 @@ Week End
 REQUSTY_API_KEY=...
 APCA_API_KEY_ID=...
 APCA_API_SECRET_KEY=...
+
+# Database (see Database section above)
+DATABASE_URL=postgresql://user:pass@localhost:5432/llm_trading
 
 # Optional (for research providers)
 GEMINI_API_KEY=...

@@ -1,4 +1,10 @@
-"""Backfill knowledge graphs for existing research reports."""
+"""
+Backfill knowledge graphs for existing research reports.
+
+NOTE: This utility script intentionally uses psycopg2 instead of asyncpg.
+Backfill scripts are one-off operations that don't benefit from connection pooling
+and don't need to be async. Keeping psycopg2 for utilities is an acceptable use case.
+"""
 
 import os
 import sys
