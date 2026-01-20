@@ -127,10 +127,10 @@ async def health_check():
         "database": "unknown"
     }
 
-    # Check Redis connectivity
+    # Check Redis connectivity (async)
     try:
-        redis_client = get_redis_client()
-        if redis_client.ping():
+        redis_pool = get_redis_pool()
+        if await redis_pool.ping():
             status["redis"] = "connected"
         else:
             status["redis"] = "disconnected"
