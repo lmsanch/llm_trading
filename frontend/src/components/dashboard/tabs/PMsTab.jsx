@@ -3,6 +3,7 @@ import { PMPitchCard } from './PMPitchCard';
 import { MarketMetrics } from './MarketMetrics';
 import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
+import { Select } from "../ui/Select";
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Play, CheckCheck, RefreshCw, Send, Loader2, Calendar, TrendingUp, FileText, ChevronDown, ChevronUp, ShieldAlert, ExternalLink, Database, Share2 } from 'lucide-react';
 import WeeklyGraphViewer from '../../WeeklyGraphViewer';
@@ -889,14 +890,15 @@ export default function PMsTab() {
         <div className="flex items-center gap-4 flex-1">
           <div className="flex-1 max-w-xs">
             <label className="block text-xs font-medium mb-1 text-muted-foreground">Select Research Report</label>
-            <select
+            <Select
               value={selectedResearch}
               onChange={(e) => setSelectedResearch(e.target.value)}
-              className="w-full px-3 py-2 text-sm border rounded-md bg-background"
+              className="w-full"
+              size="sm"
             >
               {researchReports.length === 0 && <option value="">No reports available</option>}
               {researchReports.map(report => {
-                const displayDate = report.created_at 
+                const displayDate = report.created_at
                   ? new Date(report.created_at).toLocaleString('en-US', {
                       timeZone: 'America/New_York',
                       year: 'numeric', month: '2-digit', day: '2-digit',
@@ -909,7 +911,7 @@ export default function PMsTab() {
                   </option>
                 );
               })}
-            </select>
+            </Select>
           </div>
           {/* Show Load Data button */}
           <div className="pt-5">
