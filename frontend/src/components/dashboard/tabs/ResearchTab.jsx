@@ -6,6 +6,7 @@ import { ResearchReportModal } from './ResearchReportModal';
 import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
+import { Skeleton } from "../ui/Skeleton";
 import {
   Play,
   CheckCheck,
@@ -325,22 +326,37 @@ export default function ResearchTab() {
             </div>
 
             {/* Historical Price Action Charts - Show by default */}
-            {marketSnapshot && marketSnapshot.instruments && (
-              <div className="space-y-3 pb-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <TrendingUp className="h-3 w-3" /> Historical Price Action (Last 30 Days)
-                </h3>
-                <div className="h-[400px] rounded-2xl overflow-hidden border border-border/40 shadow-lg bg-background">
-                  <MarketChart
-                    data={marketSnapshot}
-                    instruments={["SPY", "QQQ", "TLT"]}
-                  />
+            <div className="space-y-3 pb-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                <TrendingUp className="h-3 w-3" /> Historical Price Action (Last 30 Days)
+              </h3>
+              {!marketSnapshot || !marketSnapshot.instruments ? (
+                <div className="h-[400px] rounded-2xl overflow-hidden border border-border/40 shadow-lg bg-background p-6 space-y-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <Skeleton className="h-6 w-32" />
+                    <Skeleton className="h-6 w-24" />
+                  </div>
+                  <Skeleton className="h-[300px] w-full rounded-lg" />
+                  <div className="flex justify-around pt-2">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center">
-                  Showing key instruments: SPY (S&P 500), QQQ (Nasdaq), TLT (Treasuries)
-                </p>
-              </div>
-            )}
+              ) : (
+                <>
+                  <div className="h-[400px] rounded-2xl overflow-hidden border border-border/40 shadow-lg bg-background">
+                    <MarketChart
+                      data={marketSnapshot}
+                      instruments={["SPY", "QQQ", "TLT"]}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    Showing key instruments: SPY (S&P 500), QQQ (Nasdaq), TLT (Treasuries)
+                  </p>
+                </>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Left Column: Editable System Prompt (Larger Area) */}
