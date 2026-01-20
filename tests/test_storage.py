@@ -715,3 +715,867 @@ class TestGetConversation:
         retrieved2 = get_conversation(conversation_id)
         assert retrieved2 is not None
         assert retrieved2 == retrieved1
+
+
+class TestSaveConversation:
+    """Test suite for save_conversation function."""
+
+    def test_persists_changes_to_conversation(self, tmp_path, monkeypatch):
+        """Test that save_conversation persists changes to file."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-save"
+        conv = create_conversation(conversation_id)
+
+        # Modify the conversation
+        conv["title"] = "Updated Title"
+        conv["messages"].append({"role": "user", "content": "Test message"})
+
+        # Save it
+        save_conversation(conv)
+
+        # Retrieve it to verify changes were saved
+        retrieved = get_conversation(conversation_id)
+
+        assert retrieved["title"] == "Updated Title"
+        assert len(retrieved["messages"]) == 1
+        assert retrieved["messages"][0]["content"] == "Test message"
+
+    def test_saves_to_correct_file_path(self, tmp_path, monkeypatch):
+        """Test that save_conversation saves to correct file path."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-path"
+        conv = create_conversation(conversation_id)
+        conv["title"] = "Modified"
+
+        # Save it
+        save_conversation(conv)
+
+        # Verify file exists at correct path
+        file_path = tmp_path / f"{conversation_id}.json"
+        assert file_path.exists()
+
+        # Verify file contains updated data
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        assert data["title"] == "Modified"
+
+    def test_overwrites_existing_file(self, tmp_path, monkeypatch):
+        """Test that save_conversation overwrites existing file."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-overwrite"
+        conv = create_conversation(conversation_id)
+
+        # Modify and save multiple times
+        conv["title"] = "Title 1"
+        save_conversation(conv)
+
+        conv["title"] = "Title 2"
+        save_conversation(conv)
+
+        conv["title"] = "Title 3"
+        save_conversation(conv)
+
+        # Retrieve to verify only the last save persists
+        retrieved = get_conversation(conversation_id)
+        assert retrieved["title"] == "Title 3"
+
+    def test_saves_with_proper_json_formatting(self, tmp_path, monkeypatch):
+        """Test that saved JSON is properly formatted."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create and save a conversation
+        conversation_id = "test-conv-format"
+        conv = create_conversation(conversation_id)
+        conv["title"] = "Formatted"
+        save_conversation(conv)
+
+        # Read raw file content
+        file_path = tmp_path / f"{conversation_id}.json"
+        with open(file_path, "r") as f:
+            content = f.read()
+
+        # Verify proper formatting (indented)
+        assert "\n" in content
+        assert "  " in content  # 2-space indentation
+
+    def test_saves_all_conversation_fields(self, tmp_path, monkeypatch):
+        """Test that all conversation fields are saved."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation with all fields
+        conversation_id = "test-conv-fields"
+        conv = create_conversation(conversation_id)
+        conv["title"] = "Test Title"
+        conv["messages"] = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "stage1": [], "stage2": [], "stage3": {}},
+        ]
+
+        # Save it
+        save_conversation(conv)
+
+        # Retrieve and verify all fields
+        retrieved = get_conversation(conversation_id)
+
+        assert retrieved["id"] == conversation_id
+        assert retrieved["title"] == "Test Title"
+        assert "created_at" in retrieved
+        assert len(retrieved["messages"]) == 2
+
+    def test_saves_messages_array_correctly(self, tmp_path, monkeypatch):
+        """Test that messages array is saved correctly."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with multiple messages
+        conversation_id = "test-conv-messages"
+        conv = create_conversation(conversation_id)
+
+        # Add multiple messages
+        messages = [
+            {"role": "user", "content": "Message 1"},
+            {"role": "assistant", "stage1": [], "stage2": [], "stage3": {}},
+            {"role": "user", "content": "Message 2"},
+        ]
+        conv["messages"] = messages
+
+        save_conversation(conv)
+
+        # Retrieve and verify messages
+        retrieved = get_conversation(conversation_id)
+        assert len(retrieved["messages"]) == 3
+        assert retrieved["messages"][0]["content"] == "Message 1"
+        assert retrieved["messages"][2]["content"] == "Message 2"
+
+    def test_saves_unicode_content(self, tmp_path, monkeypatch):
+        """Test that unicode content is saved correctly."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with unicode
+        conversation_id = "test-conv-unicode"
+        conv = create_conversation(conversation_id)
+        conv["title"] = "Unicode test: 日本語 🚀 émoji"
+
+        save_conversation(conv)
+
+        # Retrieve and verify unicode preserved
+        retrieved = get_conversation(conversation_id)
+        assert retrieved["title"] == "Unicode test: 日本語 🚀 émoji"
+
+    def test_creates_data_directory_if_missing(self, tmp_path, monkeypatch):
+        """Test that save_conversation creates data directory if missing."""
+        # Create a subdirectory that doesn't exist
+        data_dir = tmp_path / "new_dir"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Create conversation (which saves it)
+        conv = create_conversation("test-conv")
+
+        # Manually delete the directory
+        import shutil
+        shutil.rmtree(data_dir)
+
+        assert not data_dir.exists()
+
+        # Modify and save should recreate directory
+        conv["title"] = "After dir deletion"
+        save_conversation(conv)
+
+        assert data_dir.exists()
+        assert (data_dir / "test-conv.json").exists()
+
+    def test_save_with_extra_fields(self, tmp_path, monkeypatch):
+        """Test that extra fields are saved correctly."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation and add extra fields
+        conversation_id = "test-conv-extra"
+        conv = create_conversation(conversation_id)
+        conv["extra_field"] = "extra_value"
+        conv["metadata"] = {"key": "value"}
+
+        save_conversation(conv)
+
+        # Retrieve and verify extra fields
+        retrieved = get_conversation(conversation_id)
+        assert retrieved["extra_field"] == "extra_value"
+        assert retrieved["metadata"]["key"] == "value"
+
+    def test_save_preserves_created_at(self, tmp_path, monkeypatch):
+        """Test that save_conversation preserves original created_at timestamp."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-timestamp"
+        conv = create_conversation(conversation_id)
+        original_timestamp = conv["created_at"]
+
+        # Wait and save again
+        import time
+        time.sleep(0.01)
+
+        conv["title"] = "Modified"
+        save_conversation(conv)
+
+        # Verify timestamp unchanged
+        retrieved = get_conversation(conversation_id)
+        assert retrieved["created_at"] == original_timestamp
+
+    def test_save_empty_messages_array(self, tmp_path, monkeypatch):
+        """Test saving conversation with empty messages array."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with empty messages
+        conversation_id = "test-conv-empty-messages"
+        conv = create_conversation(conversation_id)
+
+        save_conversation(conv)
+
+        # Verify empty messages array preserved
+        retrieved = get_conversation(conversation_id)
+        assert retrieved["messages"] == []
+
+    def test_save_multiple_conversations_independently(self, tmp_path, monkeypatch):
+        """Test that saving one conversation doesn't affect others."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create multiple conversations
+        conv1 = create_conversation("conv-1")
+        conv2 = create_conversation("conv-2")
+        conv3 = create_conversation("conv-3")
+
+        # Modify and save one
+        conv2["title"] = "Modified"
+        save_conversation(conv2)
+
+        # Verify others unchanged
+        retrieved1 = get_conversation("conv-1")
+        retrieved3 = get_conversation("conv-3")
+
+        assert retrieved1["title"] == "New Conversation"
+        assert retrieved3["title"] == "New Conversation"
+
+        # Verify modified one changed
+        retrieved2 = get_conversation("conv-2")
+        assert retrieved2["title"] == "Modified"
+
+
+class TestAddUserMessage:
+    """Test suite for add_user_message function."""
+
+    def test_appends_message_to_array(self, tmp_path, monkeypatch):
+        """Test that add_user_message appends to messages array."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-user-msg"
+        create_conversation(conversation_id)
+
+        # Add a user message
+        add_user_message(conversation_id, "Hello, assistant!")
+
+        # Verify message was added
+        conv = get_conversation(conversation_id)
+        assert len(conv["messages"]) == 1
+        assert conv["messages"][0]["role"] == "user"
+        assert conv["messages"][0]["content"] == "Hello, assistant!"
+
+    def test_adds_multiple_messages_sequentially(self, tmp_path, monkeypatch):
+        """Test adding multiple user messages in sequence."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-multiple-user"
+        create_conversation(conversation_id)
+
+        # Add multiple messages
+        add_user_message(conversation_id, "First message")
+        add_user_message(conversation_id, "Second message")
+        add_user_message(conversation_id, "Third message")
+
+        # Verify all messages added in order
+        conv = get_conversation(conversation_id)
+        assert len(conv["messages"]) == 3
+        assert conv["messages"][0]["content"] == "First message"
+        assert conv["messages"][1]["content"] == "Second message"
+        assert conv["messages"][2]["content"] == "Third message"
+
+    def test_message_has_correct_structure(self, tmp_path, monkeypatch):
+        """Test that user message has correct structure."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-structure"
+        create_conversation(conversation_id)
+
+        # Add a user message
+        add_user_message(conversation_id, "Test content")
+
+        # Verify message structure
+        conv = get_conversation(conversation_id)
+        message = conv["messages"][0]
+
+        assert "role" in message
+        assert "content" in message
+        assert message["role"] == "user"
+        assert message["content"] == "Test content"
+
+    def test_persists_to_file(self, tmp_path, monkeypatch):
+        """Test that add_user_message persists changes to file."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-persist"
+        create_conversation(conversation_id)
+
+        # Add a user message
+        add_user_message(conversation_id, "Persisted message")
+
+        # Read directly from file to verify persistence
+        file_path = tmp_path / f"{conversation_id}.json"
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        assert len(data["messages"]) == 1
+        assert data["messages"][0]["content"] == "Persisted message"
+
+    def test_raises_error_for_nonexistent_conversation(self, tmp_path, monkeypatch):
+        """Test that add_user_message raises error for non-existent conversation."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Try to add message to non-existent conversation
+        with pytest.raises(ValueError, match="Conversation nonexistent not found"):
+            add_user_message("nonexistent", "This should fail")
+
+    def test_handles_empty_content(self, tmp_path, monkeypatch):
+        """Test adding user message with empty content."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-empty"
+        create_conversation(conversation_id)
+
+        # Add message with empty content
+        add_user_message(conversation_id, "")
+
+        # Verify message added with empty content
+        conv = get_conversation(conversation_id)
+        assert len(conv["messages"]) == 1
+        assert conv["messages"][0]["content"] == ""
+
+    def test_handles_long_content(self, tmp_path, monkeypatch):
+        """Test adding user message with very long content."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-long"
+        create_conversation(conversation_id)
+
+        # Add message with long content
+        long_content = "x" * 10000
+        add_user_message(conversation_id, long_content)
+
+        # Verify message added correctly
+        conv = get_conversation(conversation_id)
+        assert conv["messages"][0]["content"] == long_content
+
+    def test_handles_unicode_content(self, tmp_path, monkeypatch):
+        """Test adding user message with unicode content."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-unicode"
+        create_conversation(conversation_id)
+
+        # Add message with unicode
+        unicode_content = "Hello 日本語 🚀 émoji"
+        add_user_message(conversation_id, unicode_content)
+
+        # Verify unicode preserved
+        conv = get_conversation(conversation_id)
+        assert conv["messages"][0]["content"] == unicode_content
+
+    def test_handles_special_characters(self, tmp_path, monkeypatch):
+        """Test adding user message with special characters."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-special"
+        create_conversation(conversation_id)
+
+        # Add message with special characters
+        special_content = 'Message with "quotes", \\backslashes\\, and\nnewlines'
+        add_user_message(conversation_id, special_content)
+
+        # Verify special characters preserved
+        conv = get_conversation(conversation_id)
+        assert conv["messages"][0]["content"] == special_content
+
+    def test_preserves_existing_messages(self, tmp_path, monkeypatch):
+        """Test that add_user_message preserves existing messages."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation with existing messages
+        conversation_id = "test-conv-preserve"
+        conv = create_conversation(conversation_id)
+        conv["messages"].append({"role": "user", "content": "Existing message"})
+        save_conversation(conv)
+
+        # Add new message
+        add_user_message(conversation_id, "New message")
+
+        # Verify both messages present
+        conv = get_conversation(conversation_id)
+        assert len(conv["messages"]) == 2
+        assert conv["messages"][0]["content"] == "Existing message"
+        assert conv["messages"][1]["content"] == "New message"
+
+    def test_preserves_other_conversation_fields(self, tmp_path, monkeypatch):
+        """Test that add_user_message doesn't modify other fields."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-fields"
+        conv = create_conversation(conversation_id)
+        original_title = conv["title"]
+        original_created_at = conv["created_at"]
+
+        # Add user message
+        add_user_message(conversation_id, "Test message")
+
+        # Verify other fields unchanged
+        conv = get_conversation(conversation_id)
+        assert conv["title"] == original_title
+        assert conv["created_at"] == original_created_at
+
+    def test_works_with_conversation_id_special_chars(self, tmp_path, monkeypatch):
+        """Test add_user_message with special characters in conversation ID."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with special chars in ID
+        conversation_id = "test-conv_2024-01-01"
+        create_conversation(conversation_id)
+
+        # Add user message
+        add_user_message(conversation_id, "Test message")
+
+        # Verify message added
+        conv = get_conversation(conversation_id)
+        assert len(conv["messages"]) == 1
+
+
+class TestAddAssistantMessage:
+    """Test suite for add_assistant_message function."""
+
+    def test_adds_assistant_message_with_all_stages(self, tmp_path, monkeypatch):
+        """Test that add_assistant_message stores all 3 stages."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-assistant"
+        create_conversation(conversation_id)
+
+        # Add assistant message with all stages
+        stage1 = [{"model": "gpt-4", "content": "Response 1"}]
+        stage2 = [{"model": "gpt-4", "ranking": "A > B > C"}]
+        stage3 = {"model": "gpt-4", "synthesis": "Final answer"}
+
+        add_assistant_message(conversation_id, stage1, stage2, stage3)
+
+        # Verify message structure
+        conv = get_conversation(conversation_id)
+        assert len(conv["messages"]) == 1
+
+        message = conv["messages"][0]
+        assert message["role"] == "assistant"
+        assert "stage1" in message
+        assert "stage2" in message
+        assert "stage3" in message
+        assert message["stage1"] == stage1
+        assert message["stage2"] == stage2
+        assert message["stage3"] == stage3
+
+    def test_appends_to_existing_messages(self, tmp_path, monkeypatch):
+        """Test that assistant message is appended to messages array."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with existing message
+        conversation_id = "test-conv-append"
+        conv = create_conversation(conversation_id)
+        conv["messages"].append({"role": "user", "content": "User message"})
+        save_conversation(conv)
+
+        # Add assistant message
+        stage1 = [{"model": "gpt-4", "content": "Response"}]
+        stage2 = []
+        stage3 = {}
+
+        add_assistant_message(conversation_id, stage1, stage2, stage3)
+
+        # Verify message appended
+        conv = get_conversation(conversation_id)
+        assert len(conv["messages"]) == 2
+        assert conv["messages"][0]["role"] == "user"
+        assert conv["messages"][1]["role"] == "assistant"
+
+    def test_persists_to_file(self, tmp_path, monkeypatch):
+        """Test that add_assistant_message persists to file."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-persist"
+        create_conversation(conversation_id)
+
+        # Add assistant message
+        stage1 = [{"model": "gpt-4", "content": "Test"}]
+        stage2 = []
+        stage3 = {}
+
+        add_assistant_message(conversation_id, stage1, stage2, stage3)
+
+        # Read directly from file
+        file_path = tmp_path / f"{conversation_id}.json"
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        assert len(data["messages"]) == 1
+        assert data["messages"][0]["role"] == "assistant"
+
+    def test_raises_error_for_nonexistent_conversation(self, tmp_path, monkeypatch):
+        """Test that add_assistant_message raises error for non-existent conversation."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Try to add message to non-existent conversation
+        with pytest.raises(ValueError, match="Conversation nonexistent not found"):
+            add_assistant_message("nonexistent", [], [], {})
+
+    def test_handles_empty_stages(self, tmp_path, monkeypatch):
+        """Test adding assistant message with empty stages."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-empty-stages"
+        create_conversation(conversation_id)
+
+        # Add message with empty stages
+        add_assistant_message(conversation_id, [], [], {})
+
+        # Verify message added with empty stages
+        conv = get_conversation(conversation_id)
+        message = conv["messages"][0]
+
+        assert message["stage1"] == []
+        assert message["stage2"] == []
+        assert message["stage3"] == {}
+
+    def test_handles_complex_stage_data(self, tmp_path, monkeypatch):
+        """Test adding assistant message with complex stage data."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-complex"
+        create_conversation(conversation_id)
+
+        # Add message with complex stages
+        stage1 = [
+            {"model": "gpt-4", "content": "Response 1", "metadata": {"key": "value"}},
+            {"model": "claude", "content": "Response 2"},
+        ]
+        stage2 = [
+            {"model": "gpt-4", "ranking": "A > B", "scores": [1, 2, 3]},
+        ]
+        stage3 = {
+            "model": "gpt-4",
+            "synthesis": "Final answer",
+            "aggregate_rankings": {"A": 1.5, "B": 2.0},
+        }
+
+        add_assistant_message(conversation_id, stage1, stage2, stage3)
+
+        # Verify complex data preserved
+        conv = get_conversation(conversation_id)
+        message = conv["messages"][0]
+
+        assert len(message["stage1"]) == 2
+        assert message["stage1"][0]["metadata"]["key"] == "value"
+        assert message["stage2"][0]["scores"] == [1, 2, 3]
+        assert message["stage3"]["aggregate_rankings"]["A"] == 1.5
+
+    def test_handles_unicode_in_stages(self, tmp_path, monkeypatch):
+        """Test adding assistant message with unicode in stage data."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-unicode"
+        create_conversation(conversation_id)
+
+        # Add message with unicode
+        stage1 = [{"model": "gpt-4", "content": "Response with 日本語 🚀"}]
+        stage2 = []
+        stage3 = {"synthesis": "émoji test"}
+
+        add_assistant_message(conversation_id, stage1, stage2, stage3)
+
+        # Verify unicode preserved
+        conv = get_conversation(conversation_id)
+        message = conv["messages"][0]
+
+        assert message["stage1"][0]["content"] == "Response with 日本語 🚀"
+        assert message["stage3"]["synthesis"] == "émoji test"
+
+    def test_multiple_assistant_messages(self, tmp_path, monkeypatch):
+        """Test adding multiple assistant messages in sequence."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-multiple"
+        create_conversation(conversation_id)
+
+        # Add multiple assistant messages
+        add_assistant_message(
+            conversation_id,
+            [{"content": "First"}],
+            [],
+            {"synthesis": "First synthesis"},
+        )
+        add_assistant_message(
+            conversation_id,
+            [{"content": "Second"}],
+            [],
+            {"synthesis": "Second synthesis"},
+        )
+
+        # Verify both messages added
+        conv = get_conversation(conversation_id)
+        assert len(conv["messages"]) == 2
+        assert conv["messages"][0]["stage1"][0]["content"] == "First"
+        assert conv["messages"][1]["stage1"][0]["content"] == "Second"
+
+    def test_preserves_other_conversation_fields(self, tmp_path, monkeypatch):
+        """Test that add_assistant_message doesn't modify other fields."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-fields"
+        conv = create_conversation(conversation_id)
+        original_title = conv["title"]
+        original_created_at = conv["created_at"]
+
+        # Add assistant message
+        add_assistant_message(conversation_id, [], [], {})
+
+        # Verify other fields unchanged
+        conv = get_conversation(conversation_id)
+        assert conv["title"] == original_title
+        assert conv["created_at"] == original_created_at
+
+    def test_message_structure_has_only_expected_fields(self, tmp_path, monkeypatch):
+        """Test that assistant message has only role, stage1, stage2, stage3 fields."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-fields-only"
+        create_conversation(conversation_id)
+
+        # Add assistant message
+        add_assistant_message(conversation_id, [], [], {})
+
+        # Verify message structure
+        conv = get_conversation(conversation_id)
+        message = conv["messages"][0]
+
+        expected_fields = {"role", "stage1", "stage2", "stage3"}
+        assert set(message.keys()) == expected_fields
+
+
+class TestUpdateConversationTitle:
+    """Test suite for update_conversation_title function."""
+
+    def test_updates_title(self, tmp_path, monkeypatch):
+        """Test that update_conversation_title changes the title."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-title"
+        create_conversation(conversation_id)
+
+        # Update title
+        new_title = "Updated Title"
+        update_conversation_title(conversation_id, new_title)
+
+        # Verify title updated
+        conv = get_conversation(conversation_id)
+        assert conv["title"] == new_title
+
+    def test_persists_to_file(self, tmp_path, monkeypatch):
+        """Test that title update persists to file."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-persist"
+        create_conversation(conversation_id)
+
+        # Update title
+        update_conversation_title(conversation_id, "Persisted Title")
+
+        # Read directly from file
+        file_path = tmp_path / f"{conversation_id}.json"
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        assert data["title"] == "Persisted Title"
+
+    def test_raises_error_for_nonexistent_conversation(self, tmp_path, monkeypatch):
+        """Test that update_conversation_title raises error for non-existent conversation."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Try to update title for non-existent conversation
+        with pytest.raises(ValueError, match="Conversation nonexistent not found"):
+            update_conversation_title("nonexistent", "New Title")
+
+    def test_replaces_previous_title(self, tmp_path, monkeypatch):
+        """Test that update replaces previous title completely."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-replace"
+        create_conversation(conversation_id)
+
+        # Update title multiple times
+        update_conversation_title(conversation_id, "Title 1")
+        update_conversation_title(conversation_id, "Title 2")
+        update_conversation_title(conversation_id, "Final Title")
+
+        # Verify only the last title persists
+        conv = get_conversation(conversation_id)
+        assert conv["title"] == "Final Title"
+
+    def test_handles_empty_title(self, tmp_path, monkeypatch):
+        """Test updating title to empty string."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-empty"
+        create_conversation(conversation_id)
+
+        # Update to empty title
+        update_conversation_title(conversation_id, "")
+
+        # Verify empty title set
+        conv = get_conversation(conversation_id)
+        assert conv["title"] == ""
+
+    def test_handles_long_title(self, tmp_path, monkeypatch):
+        """Test updating title to very long string."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-long"
+        create_conversation(conversation_id)
+
+        # Update to long title
+        long_title = "x" * 1000
+        update_conversation_title(conversation_id, long_title)
+
+        # Verify long title set
+        conv = get_conversation(conversation_id)
+        assert conv["title"] == long_title
+
+    def test_handles_unicode_title(self, tmp_path, monkeypatch):
+        """Test updating title with unicode characters."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-unicode"
+        create_conversation(conversation_id)
+
+        # Update to unicode title
+        unicode_title = "Title with 日本語 🚀 émoji"
+        update_conversation_title(conversation_id, unicode_title)
+
+        # Verify unicode title preserved
+        conv = get_conversation(conversation_id)
+        assert conv["title"] == unicode_title
+
+    def test_handles_special_characters_in_title(self, tmp_path, monkeypatch):
+        """Test updating title with special characters."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation
+        conversation_id = "test-conv-special"
+        create_conversation(conversation_id)
+
+        # Update to title with special chars
+        special_title = 'Title with "quotes", \\backslashes\\, and\nnewlines'
+        update_conversation_title(conversation_id, special_title)
+
+        # Verify special characters preserved
+        conv = get_conversation(conversation_id)
+        assert conv["title"] == special_title
+
+    def test_preserves_other_conversation_fields(self, tmp_path, monkeypatch):
+        """Test that update_conversation_title doesn't modify other fields."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with messages
+        conversation_id = "test-conv-preserve"
+        conv = create_conversation(conversation_id)
+        original_id = conv["id"]
+        original_created_at = conv["created_at"]
+        conv["messages"].append({"role": "user", "content": "Test"})
+        save_conversation(conv)
+
+        # Update title
+        update_conversation_title(conversation_id, "New Title")
+
+        # Verify other fields unchanged
+        conv = get_conversation(conversation_id)
+        assert conv["id"] == original_id
+        assert conv["created_at"] == original_created_at
+        assert len(conv["messages"]) == 1
+        assert conv["messages"][0]["content"] == "Test"
+
+    def test_preserves_messages_array(self, tmp_path, monkeypatch):
+        """Test that title update preserves messages array."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with multiple messages
+        conversation_id = "test-conv-messages"
+        conv = create_conversation(conversation_id)
+        messages = [
+            {"role": "user", "content": "Message 1"},
+            {"role": "assistant", "stage1": [], "stage2": [], "stage3": {}},
+            {"role": "user", "content": "Message 2"},
+        ]
+        conv["messages"] = messages
+        save_conversation(conv)
+
+        # Update title
+        update_conversation_title(conversation_id, "New Title")
+
+        # Verify messages unchanged
+        conv = get_conversation(conversation_id)
+        assert len(conv["messages"]) == 3
+        assert conv["messages"][0]["content"] == "Message 1"
+        assert conv["messages"][2]["content"] == "Message 2"
+
+    def test_works_with_conversation_id_special_chars(self, tmp_path, monkeypatch):
+        """Test update_conversation_title with special characters in conversation ID."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with special chars in ID
+        conversation_id = "test-conv_2024-01-01"
+        create_conversation(conversation_id)
+
+        # Update title
+        update_conversation_title(conversation_id, "Updated Title")
+
+        # Verify title updated
+        conv = get_conversation(conversation_id)
+        assert conv["title"] == "Updated Title"
