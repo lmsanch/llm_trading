@@ -98,8 +98,8 @@ async def shutdown_event():
     await close_pool()
     print("✓ Database connection pool closed")
 
-    # Close Redis client
-    close_redis_client()
+    # Close Redis connection pool
+    await close_redis_pool()
     print("✓ Redis connection closed")
 
 
