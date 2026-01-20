@@ -4,12 +4,12 @@ import json
 import logging
 from typing import Dict, List, Any
 
-from backend.db.database import DatabaseConnection
+from backend.db_helpers import fetch_one, execute
 
 logger = logging.getLogger(__name__)
 
 
-def save_peer_reviews(
+async def save_peer_reviews(
     week_id: str,
     peer_reviews: List[Dict[str, Any]],
     research_date: str,
@@ -50,78 +50,73 @@ def save_peer_reviews(
         Exception: If database operation fails (logged and raised)
     """
     try:
-        with DatabaseConnection() as conn:
-            with conn.cursor() as cur:
-                logger.info(
-                    f"Saving {len(peer_reviews)} peer reviews to DB for research_date {research_date}"
+        logger.info(
+            f"Saving {len(peer_reviews)} peer reviews to DB for research_date {research_date}"
+        )
+
+        # Create mapping from model to pitch_id (look up pitch IDs from DB)
+        model_to_pitch_id = {}
+        for pitch in pm_pitches:
+            model = pitch.get("model")
+            if model:
+                row = await fetch_one(
+                    """
+                    SELECT id FROM pm_pitches
+                    WHERE model = $1 AND research_date = $2
+                    ORDER BY created_at DESC LIMIT 1
+                    """,
+                    model, research_date
+                )
+                if row:
+                    model_to_pitch_id[model] = row["id"]
+
+        # Delete existing peer reviews for this research_date
+        await execute(
+            "DELETE FROM peer_reviews WHERE research_date = $1",
+            research_date
+        )
+
+        # Insert peer reviews
+        for review in peer_reviews:
+            reviewer_model = review.get("reviewer_model", "unknown")
+            pitch_label = review.get("pitch_label", "")
+
+            # Map label (e.g., "Pitch A") back to model using label_to_model
+            reviewed_model = label_to_model.get(pitch_label)
+            if reviewed_model and reviewed_model in model_to_pitch_id:
+                pitch_id = model_to_pitch_id[reviewed_model]
+
+                logger.debug(
+                    f"Inserting peer review: week_id='{week_id}', "
+                    f"pitch_label='{pitch_label}', reviewer_model='{reviewer_model}'"
                 )
 
-                # Create mapping from model to pitch_id (look up pitch IDs from DB)
-                model_to_pitch_id = {}
-                for pitch in pm_pitches:
-                    model = pitch.get("model")
-                    if model:
-                        cur.execute(
-                            """
-                            SELECT id FROM pm_pitches
-                            WHERE model = %s AND research_date = %s
-                            ORDER BY created_at DESC LIMIT 1
-                            """,
-                            (model, research_date),
-                        )
-                        row = cur.fetchone()
-                        if row:
-                            model_to_pitch_id[model] = row[0]
-
-                # Delete existing peer reviews for this research_date
-                cur.execute(
-                    "DELETE FROM peer_reviews WHERE research_date = %s",
-                    (research_date,),
+                await execute(
+                    """
+                    INSERT INTO peer_reviews
+                    (week_id, pitch_id, reviewer_model, pitch_label, review_data, research_date, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                    """,
+                    week_id,
+                    pitch_id,
+                    reviewer_model,
+                    pitch_label,
+                    json.dumps(review),
+                    research_date
+                )
+            else:
+                logger.warning(
+                    f"Could not map pitch_label '{pitch_label}' to model for review"
                 )
 
-                # Insert peer reviews
-                for review in peer_reviews:
-                    reviewer_model = review.get("reviewer_model", "unknown")
-                    pitch_label = review.get("pitch_label", "")
-
-                    # Map label (e.g., "Pitch A") back to model using label_to_model
-                    reviewed_model = label_to_model.get(pitch_label)
-                    if reviewed_model and reviewed_model in model_to_pitch_id:
-                        pitch_id = model_to_pitch_id[reviewed_model]
-
-                        logger.debug(
-                            f"Inserting peer review: week_id='{week_id}', "
-                            f"pitch_label='{pitch_label}', reviewer_model='{reviewer_model}'"
-                        )
-
-                        cur.execute(
-                            """
-                            INSERT INTO peer_reviews
-                            (week_id, pitch_id, reviewer_model, pitch_label, review_data, research_date, created_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                            """,
-                            (
-                                week_id,
-                                pitch_id,
-                                reviewer_model,
-                                pitch_label,
-                                json.dumps(review),
-                                research_date,
-                            ),
-                        )
-                    else:
-                        logger.warning(
-                            f"Could not map pitch_label '{pitch_label}' to model for review"
-                        )
-
-                logger.info("Peer reviews saved to DB successfully")
+        logger.info("Peer reviews saved to DB successfully")
 
     except Exception as e:
         logger.error(f"Error saving peer reviews to DB: {e}", exc_info=True)
         raise
 
 
-def save_chairman_decision(
+async def save_chairman_decision(
     week_id: str,
     chairman_decision: Dict[str, Any],
     research_date: str
@@ -151,29 +146,27 @@ def save_chairman_decision(
         Exception: If database operation fails (logged and raised)
     """
     try:
-        with DatabaseConnection() as conn:
-            with conn.cursor() as cur:
-                logger.info(
-                    f"Saving chairman decision to DB for research_date {research_date}"
-                )
+        logger.info(
+            f"Saving chairman decision to DB for research_date {research_date}"
+        )
 
-                # Delete existing decision for this research_date
-                cur.execute(
-                    "DELETE FROM chairman_decisions WHERE research_date = %s",
-                    (research_date,),
-                )
+        # Delete existing decision for this research_date
+        await execute(
+            "DELETE FROM chairman_decisions WHERE research_date = $1",
+            research_date
+        )
 
-                # Insert new decision
-                cur.execute(
-                    """
-                    INSERT INTO chairman_decisions
-                    (week_id, decision_data, research_date, created_at)
-                    VALUES (%s, %s, %s, NOW())
-                    """,
-                    (week_id, json.dumps(chairman_decision), research_date),
-                )
+        # Insert new decision
+        await execute(
+            """
+            INSERT INTO chairman_decisions
+            (week_id, decision_data, research_date, created_at)
+            VALUES ($1, $2, $3, NOW())
+            """,
+            week_id, json.dumps(chairman_decision), research_date
+        )
 
-                logger.info("Chairman decision saved to DB successfully")
+        logger.info("Chairman decision saved to DB successfully")
 
     except Exception as e:
         logger.error(f"Error saving chairman decision to DB: {e}", exc_info=True)
