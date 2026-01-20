@@ -1,0 +1,11 @@
+
+[2026-01-20 11:46] Subtask 2.4 COMPLETED
+- Created comprehensive test suite for stage2_collect_rankings with 17 tests
+- All acceptance criteria met:
+  ✓ Correctly anonymizes responses (Response A, B, C...)
+  ✓ Creates proper label_to_model mapping
+  ✓ Handles ranking parsing failures
+  ✓ Returns correct data structure
+- Test coverage includes: successful ranking collection, anonymization verification, label creation, parsed ranking extraction, malformed responses, partial failures, prompt structure, special characters, unicode, and integration with fixtures
+- All 17 tests passing
+- Committed: tests/test_council_stage2.py
