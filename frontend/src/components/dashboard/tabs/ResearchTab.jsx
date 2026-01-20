@@ -232,7 +232,25 @@ export default function ResearchTab() {
   );
 
   const MarketSnapshotPreview = () => {
-    if (!marketSnapshot || !marketSnapshot.instruments) return null;
+    // Show skeleton loading state
+    if (!marketSnapshot || !marketSnapshot.instruments) {
+      return (
+        <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-2 px-2">
+          {[...Array(8)].map((_, idx) => (
+            <div key={`skeleton-${idx}`} className="flex-shrink-0 w-48 bg-background p-3 rounded-lg border border-border/50 shadow-sm animate-pulse">
+              <div className="flex justify-between items-center mb-1">
+                <div className="h-4 w-12 bg-muted/50 rounded"></div>
+                <div className="h-4 w-16 bg-muted/50 rounded"></div>
+              </div>
+              <div className="flex justify-end">
+                <div className="h-4 w-14 bg-muted/40 rounded-sm"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     const tickers = Object.keys(marketSnapshot.instruments);
 
     return (
