@@ -20,14 +20,13 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import asyncio
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from multi_alpaca_client import MultiAlpacaManager
+from backend.db.pool import get_pool
 
 load_dotenv()
 
@@ -50,41 +49,30 @@ DB_USER = os.getenv("DATABASE_USER", "luis")
 # ============================================================================
 
 class MarketDataManager:
-    """Manage PostgreSQL market data operations."""
+    """Manage PostgreSQL market data operations using async pool."""
 
     def __init__(self):
-        self.conn: Optional[psycopg2.extensions.connection] = None
+        # No longer stores connection - uses pool from get_pool()
+        pass
 
-    def connect(self):
-        """Establish PostgreSQL connection (peer auth, no password)."""
-        self.conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER
-        )
-        self.conn.autocommit = False
-
-    def close(self):
-        """Close database connection."""
-        if self.conn:
-            self.conn.close()
-
-    def get_latest_date(self, symbol: str) -> Optional[str]:
+    async def get_latest_date(self, symbol: str) -> Optional[str]:
         """Get the latest daily bar date for a symbol."""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                "SELECT MAX(date) as latest_date FROM daily_bars WHERE symbol = %s",
-                (symbol,)
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT MAX(date) as latest_date FROM daily_bars WHERE symbol = $1",
+                symbol
             )
-            row = cur.fetchone()
             return row["latest_date"] if row and row["latest_date"] else None
 
-    def insert_daily_bar(self, symbol: str, bar: Dict[str, Any]) -> bool:
+    async def insert_daily_bar(self, symbol: str, bar: Dict[str, Any]) -> bool:
         """Insert or replace a daily bar using upsert."""
         try:
-            with self.conn.cursor() as cur:
-                cur.execute("""
+            pool = get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("""
                     INSERT INTO daily_bars (symbol, date, open, high, low, close, volume)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ON CONFLICT (symbol, date) DO UPDATE SET
                         open = EXCLUDED.open,
                         high = EXCLUDED.high,
@@ -92,7 +80,7 @@ class MarketDataManager:
                         close = EXCLUDED.close,
                         volume = EXCLUDED.volume,
                         created_at = NOW()
-                """, (
+                """,
                     symbol,
                     bar["date"],
                     float(bar["open"]),
@@ -100,68 +88,65 @@ class MarketDataManager:
                     float(bar["low"]),
                     float(bar["close"]),
                     int(bar["volume"])
-                ))
-            self.conn.commit()
+                )
             return True
         except Exception as e:
             print(f"  ❌ Error inserting bar for {symbol}: {e}")
-            self.conn.rollback()
             return False
 
-    def insert_hourly_snapshot(self, symbol: str, snapshot: Dict[str, Any]) -> bool:
+    async def insert_hourly_snapshot(self, symbol: str, snapshot: Dict[str, Any]) -> bool:
         """Insert or replace an hourly snapshot."""
         try:
-            with self.conn.cursor() as cur:
-                # Parse timestamp for date and hour
-                ts = datetime.fromisoformat(snapshot["timestamp"])
-                date_str = ts.date()
-                hour = ts.hour
+            # Parse timestamp for date and hour
+            ts = datetime.fromisoformat(snapshot["timestamp"])
+            date_str = ts.date()
+            hour = ts.hour
 
-                cur.execute("""
+            pool = get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("""
                     INSERT INTO hourly_snapshots (symbol, timestamp, date, hour, price, volume)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (symbol, timestamp) DO UPDATE SET
                         price = EXCLUDED.price,
                         volume = EXCLUDED.volume,
                         created_at = NOW()
-                """, (
+                """,
                     symbol,
                     snapshot["timestamp"],
                     date_str,
                     hour,
                     float(snapshot["price"]),
                     int(snapshot.get("volume", 0))
-                ))
-            self.conn.commit()
+                )
             return True
         except Exception as e:
             print(f"  ❌ Error inserting snapshot for {symbol}: {e}")
-            self.conn.rollback()
             return False
 
-    def log_fetch(self, fetch_type: str, symbol: str, success: bool, error: str = None):
+    async def log_fetch(self, fetch_type: str, symbol: str, success: bool, error: str = None):
         """Log a fetch attempt."""
-        with self.conn.cursor() as cur:
-            cur.execute("""
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("""
                 INSERT INTO fetch_log (fetch_type, symbol, status, error_message)
-                VALUES (%s, %s, %s, %s)
-            """, (fetch_type, symbol, 'success' if success else 'error', error))
-        self.conn.commit()
+                VALUES ($1, $2, $3, $4)
+            """, fetch_type, symbol, 'success' if success else 'error', error)
 
     # ==========================================================================
     # QUERIES FOR RESEARCH STAGE
     # ==========================================================================
 
-    def get_30day_bars(self, symbol: str) -> List[Dict[str, Any]]:
+    async def get_30day_bars(self, symbol: str) -> List[Dict[str, Any]]:
         """Get 30 days of daily bars for a symbol."""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
                 SELECT date, open, high, low, close, volume
                 FROM daily_bars
-                WHERE symbol = %s AND date >= CURRENT_DATE - INTERVAL '30 days'
+                WHERE symbol = $1 AND date >= CURRENT_DATE - INTERVAL '30 days'
                 ORDER BY date DESC
-            """, (symbol,))
-            rows = cur.fetchall()
+            """, symbol)
             result = []
             for row in rows:
                 r = dict(row)
@@ -174,39 +159,38 @@ class MarketDataManager:
                 result.append(r)
             return result
 
-    def get_current_price(self, symbol: str) -> Optional[float]:
+    async def get_current_price(self, symbol: str) -> Optional[float]:
         """Get the most recent price for a symbol."""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+        pool = get_pool()
+        async with pool.acquire() as conn:
             # Try hourly snapshot first
-            cur.execute("""
+            row = await conn.fetchrow("""
                 SELECT price FROM hourly_snapshots
-                WHERE symbol = %s
+                WHERE symbol = $1
                 ORDER BY timestamp DESC
                 LIMIT 1
-            """, (symbol,))
-            row = cur.fetchone()
+            """, symbol)
             if row:
                 return float(row["price"])
 
             # Fall back to daily close
-            cur.execute("""
+            row = await conn.fetchrow("""
                 SELECT close as price FROM daily_bars
-                WHERE symbol = %s
+                WHERE symbol = $1
                 ORDER BY date DESC
                 LIMIT 1
-            """, (symbol,))
-            row = cur.fetchone()
+            """, symbol)
             return float(row["price"]) if row else None
 
-    def get_checkpoint_snapshot(self, symbol: str, date: str, hour: int) -> Optional[Dict[str, Any]]:
+    async def get_checkpoint_snapshot(self, symbol: str, date: str, hour: int) -> Optional[Dict[str, Any]]:
         """Get a specific checkpoint snapshot for a symbol."""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("""
                 SELECT timestamp, price, volume
                 FROM hourly_snapshots
-                WHERE symbol = %s AND date = %s AND hour = %s
-            """, (symbol, date, hour))
-            row = cur.fetchone()
+                WHERE symbol = $1 AND date = $2 AND hour = $3
+            """, symbol, date, hour)
             return dict(row) if row else None
 
 
@@ -229,8 +213,6 @@ class MarketDataFetcher:
         print(f"\n🌱 Seeding initial data: Last {days} days")
         print("=" * 60)
 
-        self.db.connect()
-
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days + 10)
 
@@ -240,14 +222,14 @@ class MarketDataFetcher:
             # Try multiple accounts if one fails with 401
             accounts_to_try = ["COUNCIL", "GEMINI", "CLAUDE", "CHATGPT"]
             success = False
-            
+
             for account_name in accounts_to_try:
                 try:
                     # Switch to different account if needed
                     if account_name != "COUNCIL":
                         print(f"  🔄 Trying {account_name} account...")
                         self.client = self.manager.get_client(account_name)
-                    
+
                     bars = await self.client.get_bars(
                         symbol=symbol,
                         timeframe="1Day",
@@ -271,11 +253,11 @@ class MarketDataFetcher:
                             "close": float(bar["c"]),
                             "volume": int(bar["v"])
                         }
-                        if self.db.insert_daily_bar(symbol, bar_data):
+                        if await self.db.insert_daily_bar(symbol, bar_data):
                             inserted += 1
 
                     print(f"  ✅ Inserted {inserted} bars for {symbol} (via {account_name})")
-                    self.db.log_fetch("seed", symbol, True)
+                    await self.db.log_fetch("seed", symbol, True)
                     success = True
                     break  # Success, move to next symbol
 
@@ -287,18 +269,15 @@ class MarketDataFetcher:
                     else:
                         # Last account or different error
                         print(f"  ❌ Error fetching {symbol}: {e}")
-                        self.db.log_fetch("seed", symbol, False, str(e))
+                        await self.db.log_fetch("seed", symbol, False, str(e))
                         break
 
-        self.db.close()
         print("\n✅ Initial data seeding complete")
 
     async def update_daily_bars(self):
         """Fetch and update daily bars for all instruments."""
         print("\n📈 Updating daily bars")
         print("=" * 60)
-
-        self.db.connect()
 
         for symbol in INSTRUMENTS:
             print(f"\n📊 Updating {symbol}...")
@@ -324,22 +303,21 @@ class MarketDataFetcher:
                     "volume": int(bar["v"])
                 }
 
-                latest_date = self.db.get_latest_date(symbol)
+                latest_date = await self.db.get_latest_date(symbol)
                 if latest_date == bar_data["date"]:
                     print(f"  ✓ Already have data for {bar_data['date']}")
                     continue
 
-                if self.db.insert_daily_bar(symbol, bar_data):
+                if await self.db.insert_daily_bar(symbol, bar_data):
                     print(f"  ✅ Inserted bar for {bar_data['date']}")
-                    self.db.log_fetch("daily_close", symbol, True)
+                    await self.db.log_fetch("daily_close", symbol, True)
                 else:
-                    self.db.log_fetch("daily_close", symbol, False, "Insert failed")
+                    await self.db.log_fetch("daily_close", symbol, False, "Insert failed")
 
             except Exception as e:
                 print(f"  ❌ Error updating {symbol}: {e}")
-                self.db.log_fetch("daily_close", symbol, False, str(e))
+                await self.db.log_fetch("daily_close", symbol, False, str(e))
 
-        self.db.close()
         print("\n✅ Daily bars updated")
 
     async def fetch_hourly_snapshots(self):
@@ -354,8 +332,6 @@ class MarketDataFetcher:
         if hour not in CHECKPOINT_HOURS:
             print(f"  ⏭️  Skipping (not a checkpoint hour)")
             return
-
-        self.db.connect()
 
         for symbol in INSTRUMENTS:
             print(f"  📸 {symbol}...", end=" ")
@@ -378,31 +354,28 @@ class MarketDataFetcher:
                     "volume": int(bar["v"])
                 }
 
-                if self.db.insert_hourly_snapshot(symbol, snapshot):
+                if await self.db.insert_hourly_snapshot(symbol, snapshot):
                     print("✅")
-                    self.db.log_fetch("hourly_snapshot", symbol, True)
+                    await self.db.log_fetch("hourly_snapshot", symbol, True)
                 else:
                     print("❌")
-                    self.db.log_fetch("hourly_snapshot", symbol, False, "Insert failed")
+                    await self.db.log_fetch("hourly_snapshot", symbol, False, "Insert failed")
 
             except Exception as e:
                 print(f"❌ {e}")
-                self.db.log_fetch("hourly_snapshot", symbol, False, str(e))
+                await self.db.log_fetch("hourly_snapshot", symbol, False, str(e))
 
-        self.db.close()
         print("\n✅ Hourly snapshots updated")
 
-    def get_market_snapshot_for_research(self) -> Dict[str, Any]:
+    async def get_market_snapshot_for_research(self) -> Dict[str, Any]:
         """Get market snapshot for research (called by ResearchStage)."""
-        self.db.connect()
-
         market_data = {
             "asof_et": datetime.now().isoformat(),
             "instruments": {}
         }
 
         for symbol in INSTRUMENTS:
-            bars = self.db.get_30day_bars(symbol)
+            bars = await self.db.get_30day_bars(symbol)
 
             if not bars:
                 print(f"  ⚠️  No data for {symbol}")
@@ -413,7 +386,7 @@ class MarketDataFetcher:
             sma_50 = sum(closes[:50]) / 50 if len(closes) >= 50 else None
             rsi_14 = self._calculate_rsi(closes, 14) if len(closes) >= 14 else None
 
-            current_price = self.db.get_current_price(symbol)
+            current_price = await self.db.get_current_price(symbol)
             latest = bars[0]
             previous = bars[1] if len(bars) > 1 else latest
             change_pct = ((current_price - previous["close"]) / previous["close"]) * 100 if previous["close"] > 0 else 0.0
@@ -436,13 +409,10 @@ class MarketDataFetcher:
                 }
             }
 
-        self.db.close()
         return market_data
 
-    def get_checkpoint_snapshot_for_conviction(self) -> Dict[str, Any]:
+    async def get_checkpoint_snapshot_for_conviction(self) -> Dict[str, Any]:
         """Get checkpoint snapshot for daily conviction updates."""
-        self.db.connect()
-
         now = datetime.now()
         today = now.strftime("%Y-%m-%d")
 
@@ -453,19 +423,19 @@ class MarketDataFetcher:
             "instruments": {}
         }
 
+        pool = get_pool()
         for symbol in INSTRUMENTS:
-            current_price = self.db.get_current_price(symbol)
+            current_price = await self.db.get_current_price(symbol)
 
             # Get week open
-            with self.db.conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow("""
                     SELECT close FROM daily_bars
-                    WHERE symbol = %s AND date >= date_trunc('week', CURRENT_DATE) + INTERVAL '3 days'
+                    WHERE symbol = $1 AND date >= date_trunc('week', CURRENT_DATE) + INTERVAL '3 days'
                         AND date < date_trunc('week', CURRENT_DATE) + INTERVAL '10 days'
                     ORDER BY date ASC
                     LIMIT 1
-                """, (symbol,))
-                row = cur.fetchone()
+                """, symbol)
                 week_open = row["close"] if row else None
 
             if current_price and week_open:
@@ -478,7 +448,6 @@ class MarketDataFetcher:
                 "change_since_week_open_pct": round(change_pct, 2) if change_pct else None
             }
 
-        self.db.close()
         return snapshot
 
     @staticmethod
