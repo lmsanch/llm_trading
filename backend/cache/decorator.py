@@ -571,11 +571,14 @@ def invalidate_cache(
     pattern: Optional[str] = None
 ) -> int:
     """
-    Manually invalidate cache entries (sync version).
+    Manually invalidate cache entries (sync wrapper).
 
     This function allows manual cache invalidation by either:
     - Deleting a specific key
     - Deleting all keys matching a pattern
+
+    This is a synchronous wrapper around invalidate_cache_async() that
+    runs the async version in an event loop for backwards compatibility.
 
     Args:
         key: Specific cache key to delete
@@ -601,24 +604,34 @@ def invalidate_cache(
         - Use pattern with caution - it can delete many keys at once
         - Returns 0 if Redis is unavailable or if no keys match
         - Use this in sync contexts (scripts, sync functions)
-        - For async contexts, use invalidate_cache_async() instead
+        - For async contexts, use invalidate_cache_async() instead for better performance
+        - This function creates a new event loop internally, which has overhead
     """
     if key is None and pattern is None:
         raise ValueError("Either 'key' or 'pattern' must be provided")
 
     try:
-        redis_client = get_redis_client()
-
-        if key is not None:
-            count = redis_client.delete(key)
-            logger.info(f"Cache invalidated: {key} (deleted={count})")
-            return count
-        else:
-            count = redis_client.delete_pattern(pattern)
-            logger.info(
-                f"Cache invalidated by pattern: {pattern} (deleted={count})"
+        # Run the async version in an event loop
+        # Try to get existing event loop first
+        try:
+            loop = asyncio.get_running_loop()
+            # If we're already in an async context, we can't use asyncio.run()
+            # This shouldn't happen in normal usage, but log a warning
+            logger.warning(
+                "invalidate_cache() called from async context. "
+                "Use invalidate_cache_async() instead for better performance."
             )
-            return count
+            # Create a task and wait for it
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    asyncio.run,
+                    invalidate_cache_async(key=key, pattern=pattern)
+                )
+                return future.result()
+        except RuntimeError:
+            # No event loop running, we can use asyncio.run()
+            return asyncio.run(invalidate_cache_async(key=key, pattern=pattern))
 
     except Exception as e:
         logger.error(f"Failed to invalidate cache: {e}")
