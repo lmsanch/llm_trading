@@ -7,6 +7,16 @@ Calculations:
 2. 7-day log returns: ln(close_t / close_t-7)
 3. 30-day rolling correlation matrix of 7-day log returns
 
+ASYNC PATTERNS USED:
+    This module demonstrates batch operations with asyncpg connection pool.
+    See backend/db/ASYNC_PATTERNS.md for complete documentation.
+
+    Key patterns:
+    - Batch inserts use conn.executemany() for performance
+    - Connection pool is acquired with 'async with pool.acquire()'
+    - All database operations use 'await'
+    - Parameter placeholders use $1, $2, $3 (not %s)
+
 Usage:
     python calculate_metrics.py          # Calculate all metrics
     python calculate_metrics.py --backfill  # Backfill historical metrics
@@ -67,8 +77,16 @@ class MetricsDB:
             FROM daily_bars
             ORDER BY symbol, date
         """
+        # ASYNC PATTERN: Direct pool usage (advanced)
+        # - Use when you need fine-grained control over connection
+        # - get_pool() returns the global connection pool singleton
+        # - 'async with pool.acquire()' automatically gets/releases connection
+        # - Connection is returned to pool on exit (even on exception)
         pool = get_pool()
         async with pool.acquire() as conn:
+            # ASYNC PATTERN: Use await with conn.fetch()
+            # - conn.fetch() returns all rows as list of Record objects
+            # - Records are dict-like: access with row["column_name"]
             rows = await conn.fetch(query)
             # Convert to list of dicts for DataFrame
             data = [dict(row) for row in rows]
@@ -90,7 +108,11 @@ class MetricsDB:
             print("  ⚠️  No daily log returns to insert")
             return
 
-        # Prepare data for bulk insert
+        # ASYNC PATTERN: Batch operations (efficient bulk insert)
+        # - Prepare list of tuples for executemany()
+        # - Each tuple contains parameters for one row ($1, $2, $3)
+        # - Much faster than calling execute() in a loop (single transaction)
+        # - For 100 rows: 1 round-trip vs 100 round-trips
         data = [
             (row['symbol'], row['date'], float(row['log_return']) if pd.notna(row['log_return']) else None)
             for _, row in df.iterrows()
@@ -98,6 +120,11 @@ class MetricsDB:
 
         pool = get_pool()
         async with pool.acquire() as conn:
+            # ASYNC PATTERN: Use await with conn.executemany() for batch operations
+            # - executemany() runs all operations in a single transaction
+            # - All rows succeed or all fail (atomic)
+            # - 10-100x faster than individual execute() calls
+            # - Use $1, $2, $3 placeholders (not %s, %s, %s)
             await conn.executemany(
                 """
                 INSERT INTO daily_log_returns (symbol, date, log_return)

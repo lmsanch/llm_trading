@@ -1,10 +1,23 @@
-"""PM pitch database operations."""
+"""PM pitch database operations.
+
+ASYNC PATTERNS USED:
+    This module demonstrates JSONB handling with asyncpg.
+    See backend/db/ASYNC_PATTERNS.md for complete documentation.
+
+    Key patterns:
+    - JSONB columns: Pass dicts directly (no Json() wrapper needed)
+    - Complete async chain: API → Service → DB → Pool
+    - All functions are async and use await
+    - Parameter placeholders use $1, $2, $3 (not %s)
+    - Row access uses dict keys (not numeric indices)
+"""
 
 import json
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 
+# Import async database helpers
 from backend.db_helpers import fetch_one, fetch_all, fetch_val, execute
 
 logger = logging.getLogger(__name__)
@@ -72,7 +85,12 @@ async def save_pitches(
                     week_id, model
                 )
 
-            # Insert new pitch
+            # ASYNC PATTERN: Execute INSERT with await
+            # - execute() automatically uses connection pool
+            # - Parameters use $1, $2, $3 placeholders (not %s)
+            # - JSONB column (pitch_data): json.dumps() for text storage
+            #   (In pure JSONB columns, you can pass dict directly without json.dumps)
+            # - All operations are async and non-blocking
             await execute(
                 """
                 INSERT INTO pm_pitches
@@ -82,7 +100,7 @@ async def save_pitches(
                 week_id,
                 model,
                 account,
-                json.dumps(pitch),
+                json.dumps(pitch),  # TEXT column, so we use json.dumps()
                 pitch.get("selected_instrument") or pitch.get("instrument"),
                 pitch.get("direction"),
                 float(pitch.get("conviction", 0)),

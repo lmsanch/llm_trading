@@ -1,8 +1,21 @@
-"""Market data database operations."""
+"""Market data database operations.
+
+ASYNC PATTERNS USED:
+    This module demonstrates the asyncpg async database patterns.
+    See backend/db/ASYNC_PATTERNS.md for complete documentation.
+
+    Key patterns:
+    - All database functions are async (use 'async def')
+    - All database calls use 'await' (don't forget!)
+    - Uses $1, $2, $3 parameter placeholders (not %s)
+    - Row access uses dict keys (not numeric indices)
+    - Connection pool is automatic (no manual connection management)
+"""
 
 import logging
 from typing import Dict, List, Optional, Any
 
+# Import async database helpers - these automatically use the connection pool
 from backend.db_helpers import fetch_all, fetch_val
 
 logger = logging.getLogger(__name__)
@@ -28,7 +41,11 @@ async def fetch_market_metrics() -> Optional[Dict[str, Any]]:
         - correlation_matrix: Contains pairwise correlations by symbol/date
     """
     try:
-        # Get latest 7-day returns
+        # ASYNC PATTERN: Use await with fetch_all helper
+        # - fetch_all automatically acquires connection from pool
+        # - Returns list of dicts (empty list if no rows)
+        # - Connection is automatically returned to pool after query
+        # - No parameters needed for this query (no $1, $2 placeholders)
         returns_rows = await fetch_all("""
             SELECT symbol, log_return_7d
             FROM rolling_7day_log_returns
@@ -36,10 +53,14 @@ async def fetch_market_metrics() -> Optional[Dict[str, Any]]:
             ORDER BY log_return_7d DESC
         """)
 
+        # ASYNC PATTERN: Row access uses dict keys (not row[0], row[1])
+        # - asyncpg returns rows as dict-like objects
+        # - Access columns by name: row["column_name"]
+        # - This is different from psycopg2 which used numeric indices
         returns = [
             {
-                "symbol": row["symbol"],
-                "log_return_7d": float(row["log_return_7d"]),
+                "symbol": row["symbol"],  # Dict access, not row[0]
+                "log_return_7d": float(row["log_return_7d"]),  # Dict access, not row[1]
                 "pct_return": (float(row["log_return_7d"]) * 100),
             }
             for row in returns_rows
@@ -65,7 +86,10 @@ async def fetch_market_metrics() -> Optional[Dict[str, Any]]:
                 correlation_matrix[symbol1] = {}
             correlation_matrix[symbol1][symbol2] = float(corr)
 
-        # Get the date
+        # ASYNC PATTERN: Use await with fetch_val for single values
+        # - fetch_val returns a scalar value (not a dict or list)
+        # - Useful for COUNT, MAX, MIN, SUM, etc.
+        # - Returns None if query produces no rows
         latest_date = await fetch_val("SELECT MAX(date) FROM rolling_7day_log_returns")
 
         return {
