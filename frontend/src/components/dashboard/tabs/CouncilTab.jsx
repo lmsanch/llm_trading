@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
-import { Play, CheckCircle, XCircle, RefreshCw, AlertTriangle, Activity } from 'lucide-react';
+import { Play, CheckCircle, XCircle, RefreshCw, AlertTriangle, Activity, Loader2 } from 'lucide-react';
 import { tradingApi } from '../../../api/trading';
+import { cn } from "../../../lib/utils";
 
 export default function CouncilTab() {
     const [decision, setDecision] = useState(null);
@@ -49,8 +50,8 @@ export default function CouncilTab() {
                 <div className="text-center p-12 border rounded-lg border-dashed max-w-lg">
                     <h3 className="text-lg font-semibold mb-2">No Council Decision Yet</h3>
                     <p className="text-muted-foreground mb-6">Run the research and PM stages first to generate a trading decision.</p>
-                    <Button onClick={loadDecision} variant="outline">
-                        <RefreshCw className="mr-2 h-4 w-4" /> Refresh Data
+                    <Button onClick={loadDecision} variant="outline" disabled={loading}>
+                        <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> Refresh Data
                     </Button>
                 </div>
             </div>
@@ -193,8 +194,8 @@ export default function CouncilTab() {
                     <Card className="bg-muted/30">
                         <CardContent className="p-6 space-y-4">
                             <h3 className="font-semibold text-center text-muted-foreground mb-4">Actions</h3>
-                            <Button onClick={loadDecision} className="w-full" variant="outline">
-                                <RefreshCw className="mr-2 h-4 w-4" /> Regenerate Decision
+                            <Button onClick={loadDecision} className="w-full" variant="outline" disabled={loading}>
+                                <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> Regenerate Decision
                             </Button>
                             <Button className="w-full bg-red-500/10 text-red-500 hover:bg-red-500/20 hover:text-red-400 border-red-500/20">
                                 <XCircle className="mr-2 h-4 w-4" /> Reject Trade
