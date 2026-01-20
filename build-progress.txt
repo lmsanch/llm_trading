@@ -9,3 +9,36 @@
 - Test coverage includes: successful ranking collection, anonymization verification, label creation, parsed ranking extraction, malformed responses, partial failures, prompt structure, special characters, unicode, and integration with fixtures
 - All 17 tests passing
 - Committed: tests/test_council_stage2.py
+
+## 2026-01-20 - Subtask 8.1 Completed
+
+**Task:** Set up pytest-cov with appropriate coverage configuration
+
+**Status:** ✅ COMPLETED
+
+**Changes Made:**
+- Added comprehensive pytest configuration in pyproject.toml
+- Configured pytest-cov with source paths, omit patterns, and branch coverage
+- Set minimum coverage threshold to 80%
+- Configured HTML and terminal coverage reports
+- Added test markers for slow, integration, and unit tests
+
+**Configuration Highlights:**
+- Coverage sources: backend/, market/, storage/
+- Branch coverage enabled for thorough analysis
+- Excludes: tests, vendor code, migrations, config files
+- Reports: HTML (htmlcov/), terminal (term-missing)
+- Threshold: 80% minimum coverage (fail_under=80)
+
+**Usage:**
+```bash
+pytest --cov --cov-report=html --cov-report=term-missing
+```
+
+**Acceptance Criteria Met:**
+✓ pytest-cov configured in pyproject.toml
+✓ Coverage report generates HTML and terminal
+✓ Minimum coverage threshold set (target: 80%)
+✓ Coverage excludes test files and vendor code
+
+**Next Step:** Run coverage analysis (subtask 8.2)
