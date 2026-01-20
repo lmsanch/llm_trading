@@ -944,3 +944,829 @@ class TestAlpacaAccountClientGetOrders:
                     '/v2/orders',
                     params={'status': status}
                 )
+
+
+# ============================================================================
+# PLACE ORDER TESTS WITH MOCKED HTTP RESPONSES
+# ============================================================================
+
+
+class TestAlpacaAccountClientPlaceOrder:
+    """Test suite for place_order method with various order types and parameters."""
+
+    @pytest.mark.asyncio
+    async def test_place_market_order_buy(self):
+        """Test placing a market buy order."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-123",
+            "client_order_id": "test-order-123",
+            "symbol": "SPY",
+            "qty": "10",
+            "side": "buy",
+            "type": "market",
+            "time_in_force": "gtc",
+            "status": "accepted",
+            "created_at": "2025-01-20T12:00:00Z",
+            "extended_hours": False,
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="SPY",
+                qty=10,
+                side="buy",
+                order_type="market"
+            )
+
+            # Verify result matches mock data
+            assert result == mock_order_response
+            assert result['symbol'] == 'SPY'
+            assert result['qty'] == '10'
+            assert result['side'] == 'buy'
+            assert result['type'] == 'market'
+
+            # Verify correct endpoint and payload
+            call_args = mock_client_instance.post.call_args
+            assert call_args[0][0] == '/v2/orders'
+            payload = call_args[1]['json']
+            assert payload['symbol'] == 'SPY'
+            assert payload['qty'] == '10'
+            assert payload['side'] == 'buy'
+            assert payload['type'] == 'market'
+            assert payload['time_in_force'] == 'gtc'
+            assert payload['extended_hours'] is False
+
+    @pytest.mark.asyncio
+    async def test_place_market_order_sell(self):
+        """Test placing a market sell order."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-456",
+            "symbol": "QQQ",
+            "qty": "5",
+            "side": "sell",
+            "type": "market",
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="QQQ",
+                qty=5,
+                side="sell"
+            )
+
+            # Verify result
+            assert result['symbol'] == 'QQQ'
+            assert result['side'] == 'sell'
+
+            # Verify payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['side'] == 'sell'
+
+    @pytest.mark.asyncio
+    async def test_place_limit_order_with_limit_price(self):
+        """Test placing a limit order with limit_price."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-789",
+            "symbol": "SPY",
+            "qty": "10",
+            "side": "buy",
+            "type": "limit",
+            "limit_price": "450.00",
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="SPY",
+                qty=10,
+                side="buy",
+                order_type="limit",
+                limit_price="450.00"
+            )
+
+            # Verify result includes limit_price
+            assert result['type'] == 'limit'
+            assert result['limit_price'] == '450.00'
+
+            # Verify payload includes limit_price
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['type'] == 'limit'
+            assert payload['limit_price'] == '450.00'
+
+    @pytest.mark.asyncio
+    async def test_place_stop_order_with_stop_price(self):
+        """Test placing a stop order with stop_price."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-101",
+            "symbol": "TLT",
+            "qty": "20",
+            "side": "sell",
+            "type": "stop",
+            "stop_price": "90.00",
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="TLT",
+                qty=20,
+                side="sell",
+                order_type="stop",
+                stop_price="90.00"
+            )
+
+            # Verify result includes stop_price
+            assert result['type'] == 'stop'
+            assert result['stop_price'] == '90.00'
+
+            # Verify payload includes stop_price
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['type'] == 'stop'
+            assert payload['stop_price'] == '90.00'
+
+    @pytest.mark.asyncio
+    async def test_place_stop_limit_order(self):
+        """Test placing a stop_limit order with both stop_price and limit_price."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-102",
+            "symbol": "GLD",
+            "qty": "15",
+            "side": "buy",
+            "type": "stop_limit",
+            "stop_price": "180.00",
+            "limit_price": "182.00",
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="GLD",
+                qty=15,
+                side="buy",
+                order_type="stop_limit",
+                stop_price="180.00",
+                limit_price="182.00"
+            )
+
+            # Verify result includes both prices
+            assert result['type'] == 'stop_limit'
+            assert result['stop_price'] == '180.00'
+            assert result['limit_price'] == '182.00'
+
+            # Verify payload includes both prices
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['type'] == 'stop_limit'
+            assert payload['stop_price'] == '180.00'
+            assert payload['limit_price'] == '182.00'
+
+    @pytest.mark.asyncio
+    async def test_place_order_time_in_force_gtc(self):
+        """Test placing order with time_in_force='gtc' (good till canceled)."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-103",
+            "symbol": "SPY",
+            "qty": "10",
+            "side": "buy",
+            "type": "market",
+            "time_in_force": "gtc",
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="SPY",
+                qty=10,
+                side="buy",
+                time_in_force="gtc"
+            )
+
+            # Verify time_in_force is gtc (default)
+            assert result['time_in_force'] == 'gtc'
+
+            # Verify payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['time_in_force'] == 'gtc'
+
+    @pytest.mark.asyncio
+    async def test_place_order_time_in_force_day(self):
+        """Test placing order with time_in_force='day'."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-104",
+            "symbol": "QQQ",
+            "qty": "5",
+            "side": "buy",
+            "type": "market",
+            "time_in_force": "day",
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="QQQ",
+                qty=5,
+                side="buy",
+                time_in_force="day"
+            )
+
+            # Verify time_in_force is day
+            assert result['time_in_force'] == 'day'
+
+            # Verify payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['time_in_force'] == 'day'
+
+    @pytest.mark.asyncio
+    async def test_place_order_time_in_force_ioc(self):
+        """Test placing order with time_in_force='ioc' (immediate or cancel)."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-105",
+            "symbol": "IWM",
+            "qty": "8",
+            "side": "sell",
+            "type": "limit",
+            "limit_price": "200.00",
+            "time_in_force": "ioc",
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="IWM",
+                qty=8,
+                side="sell",
+                order_type="limit",
+                limit_price="200.00",
+                time_in_force="ioc"
+            )
+
+            # Verify time_in_force is ioc
+            assert result['time_in_force'] == 'ioc'
+
+            # Verify payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['time_in_force'] == 'ioc'
+
+    @pytest.mark.asyncio
+    async def test_place_order_time_in_force_fok(self):
+        """Test placing order with time_in_force='fok' (fill or kill)."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-106",
+            "symbol": "HYG",
+            "qty": "12",
+            "side": "buy",
+            "type": "limit",
+            "limit_price": "75.50",
+            "time_in_force": "fok",
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="HYG",
+                qty=12,
+                side="buy",
+                order_type="limit",
+                limit_price="75.50",
+                time_in_force="fok"
+            )
+
+            # Verify time_in_force is fok
+            assert result['time_in_force'] == 'fok'
+
+            # Verify payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['time_in_force'] == 'fok'
+
+    @pytest.mark.asyncio
+    async def test_place_order_with_extended_hours_true(self):
+        """Test placing order with extended_hours=True."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-107",
+            "symbol": "SPY",
+            "qty": "10",
+            "side": "buy",
+            "type": "limit",
+            "limit_price": "445.00",
+            "extended_hours": True,
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="SPY",
+                qty=10,
+                side="buy",
+                order_type="limit",
+                limit_price="445.00",
+                extended_hours=True
+            )
+
+            # Verify extended_hours is True
+            assert result['extended_hours'] is True
+
+            # Verify payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['extended_hours'] is True
+
+    @pytest.mark.asyncio
+    async def test_place_order_with_extended_hours_false(self):
+        """Test placing order with extended_hours=False (default)."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-108",
+            "symbol": "QQQ",
+            "qty": "5",
+            "side": "buy",
+            "type": "market",
+            "extended_hours": False,
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="QQQ",
+                qty=5,
+                side="buy",
+                extended_hours=False
+            )
+
+            # Verify extended_hours is False
+            assert result['extended_hours'] is False
+
+            # Verify payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['extended_hours'] is False
+
+    @pytest.mark.asyncio
+    async def test_place_order_qty_converted_to_string(self):
+        """Test that qty is converted to string in the payload."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_order_response = {
+            "id": "order-109",
+            "symbol": "SPY",
+            "qty": "100",
+            "side": "buy",
+            "type": "market",
+            "status": "accepted",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_order_response
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            await client.place_order(
+                symbol="SPY",
+                qty=100,  # Integer input
+                side="buy"
+            )
+
+            # Verify qty is converted to string in payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['qty'] == '100'
+            assert isinstance(payload['qty'], str)
+
+    @pytest.mark.asyncio
+    async def test_place_order_http_error_400(self):
+        """Test that place_order raises exception on HTTP 400 error (validation error)."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        error_response_data = {
+            "code": 40010001,
+            "message": "qty is required"
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = error_response_data
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            with pytest.raises(Exception, match="Order failed for CHATGPT"):
+                await client.place_order(
+                    symbol="SPY",
+                    qty=10,
+                    side="buy"
+                )
+
+    @pytest.mark.asyncio
+    async def test_place_order_http_error_422(self):
+        """Test that place_order raises exception on HTTP 422 error (unprocessable entity)."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        error_response_data = {
+            "code": 42210000,
+            "message": "insufficient buying power"
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 422
+        mock_response.json.return_value = error_response_data
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            with pytest.raises(Exception, match="insufficient buying power"):
+                await client.place_order(
+                    symbol="SPY",
+                    qty=1000,
+                    side="buy"
+                )
+
+    @pytest.mark.asyncio
+    async def test_place_order_http_error_403(self):
+        """Test that place_order raises exception on HTTP 403 error (forbidden)."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        error_response_data = {
+            "code": 40310000,
+            "message": "forbidden: account is not authorized for trading"
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.json.return_value = error_response_data
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            with pytest.raises(Exception, match="forbidden"):
+                await client.place_order(
+                    symbol="SPY",
+                    qty=10,
+                    side="buy"
+                )
+
+    @pytest.mark.asyncio
+    async def test_place_order_uses_correct_headers(self):
+        """Test that place_order uses correct authentication headers."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "order-110", "status": "accepted"}
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            await client.place_order(
+                symbol="SPY",
+                qty=10,
+                side="buy"
+            )
+
+            # Verify AsyncClient was initialized with correct headers
+            call_kwargs = mock_client_class.call_args[1]
+            assert 'headers' in call_kwargs
+            headers = call_kwargs['headers']
+            assert 'APCA-API-KEY-ID' in headers
+            assert 'APCA-API-SECRET-KEY' in headers
+            assert 'Content-Type' in headers
+            assert headers['Content-Type'] == 'application/json'
+
+    @pytest.mark.asyncio
+    async def test_place_order_uses_correct_base_url(self):
+        """Test that place_order uses paper trading URL."""
+        client = AlpacaAccountClient('CHATGPT', paper=True)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "order-111"}
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            await client.place_order(
+                symbol="SPY",
+                qty=10,
+                side="buy"
+            )
+
+            # Verify correct base_url was used
+            call_kwargs = mock_client_class.call_args[1]
+            assert call_kwargs['base_url'] == PAPER_URL
+
+    @pytest.mark.asyncio
+    async def test_place_order_multiple_symbols(self):
+        """Test place_order with multiple different symbols."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        symbols_to_test = ['SPY', 'QQQ', 'IWM', 'TLT', 'HYG', 'GLD', 'USO']
+
+        for symbol in symbols_to_test:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "id": f"order-{symbol}",
+                "symbol": symbol,
+                "qty": "10",
+                "side": "buy",
+                "status": "accepted"
+            }
+
+            with patch('httpx.AsyncClient') as mock_client_class:
+                mock_client_instance = MagicMock()
+                mock_client_instance.post = AsyncMock(return_value=mock_response)
+                mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+                result = await client.place_order(
+                    symbol=symbol,
+                    qty=10,
+                    side="buy"
+                )
+
+                # Verify correct symbol in result
+                assert result['symbol'] == symbol
+
+                # Verify correct symbol in payload
+                payload = mock_client_instance.post.call_args[1]['json']
+                assert payload['symbol'] == symbol
+
+    @pytest.mark.asyncio
+    async def test_place_order_error_includes_account_name(self):
+        """Test that error message includes account name."""
+        client = AlpacaAccountClient('GEMINI')
+
+        error_response_data = {
+            "message": "insufficient buying power"
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 422
+        mock_response.json.return_value = error_response_data
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            with pytest.raises(Exception, match="Order failed for GEMINI"):
+                await client.place_order(
+                    symbol="SPY",
+                    qty=1000,
+                    side="buy"
+                )
+
+    @pytest.mark.asyncio
+    async def test_place_order_limit_price_not_included_for_market_order(self):
+        """Test that limit_price is not included in payload for market orders when not provided."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "order-112", "status": "accepted"}
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            await client.place_order(
+                symbol="SPY",
+                qty=10,
+                side="buy",
+                order_type="market"
+            )
+
+            # Verify limit_price is NOT in payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert 'limit_price' not in payload
+
+    @pytest.mark.asyncio
+    async def test_place_order_stop_price_not_included_for_market_order(self):
+        """Test that stop_price is not included in payload for market orders when not provided."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "order-113", "status": "accepted"}
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            await client.place_order(
+                symbol="SPY",
+                qty=10,
+                side="buy",
+                order_type="market"
+            )
+
+            # Verify stop_price is NOT in payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert 'stop_price' not in payload
+
+    @pytest.mark.asyncio
+    async def test_place_order_large_quantity(self):
+        """Test placing order with large quantity."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id": "order-114",
+            "symbol": "SPY",
+            "qty": "1000",
+            "side": "buy",
+            "status": "accepted"
+        }
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="SPY",
+                qty=1000,
+                side="buy"
+            )
+
+            # Verify large quantity is handled correctly
+            assert result['qty'] == '1000'
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['qty'] == '1000'
+
+    @pytest.mark.asyncio
+    async def test_place_order_all_parameters(self):
+        """Test placing order with all optional parameters specified."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id": "order-115",
+            "symbol": "SPY",
+            "qty": "10",
+            "side": "buy",
+            "type": "stop_limit",
+            "limit_price": "450.00",
+            "stop_price": "445.00",
+            "time_in_force": "day",
+            "extended_hours": True,
+            "status": "accepted"
+        }
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.place_order(
+                symbol="SPY",
+                qty=10,
+                side="buy",
+                order_type="stop_limit",
+                limit_price="450.00",
+                stop_price="445.00",
+                time_in_force="day",
+                extended_hours=True
+            )
+
+            # Verify all parameters in result
+            assert result['symbol'] == 'SPY'
+            assert result['qty'] == '10'
+            assert result['side'] == 'buy'
+            assert result['type'] == 'stop_limit'
+            assert result['limit_price'] == '450.00'
+            assert result['stop_price'] == '445.00'
+            assert result['time_in_force'] == 'day'
+            assert result['extended_hours'] is True
+
+            # Verify all parameters in payload
+            payload = mock_client_instance.post.call_args[1]['json']
+            assert payload['symbol'] == 'SPY'
+            assert payload['qty'] == '10'
+            assert payload['side'] == 'buy'
+            assert payload['type'] == 'stop_limit'
+            assert payload['limit_price'] == '450.00'
+            assert payload['stop_price'] == '445.00'
+            assert payload['time_in_force'] == 'day'
+            assert payload['extended_hours'] is True
