@@ -1,6 +1,7 @@
 """Multi-account Alpaca client for managing 6 paper trading accounts."""
 
 import os
+import asyncio
 import httpx
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
