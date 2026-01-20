@@ -149,6 +149,50 @@ function ResearchPreviewSkeleton() {
   );
 }
 
+function PMPitchCardSkeleton() {
+  return (
+    <Card className="flex flex-col animate-pulse">
+      <CardHeader className="pb-3">
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-3 flex-1">
+            {/* Logo skeleton */}
+            <div className="w-12 h-12 rounded-lg bg-muted" />
+            <div className="flex-1">
+              {/* Instrument and direction skeleton */}
+              <div className="flex items-center gap-2 mb-1">
+                <div className="h-7 w-20 bg-muted rounded" />
+                <div className="h-5 w-16 bg-muted rounded" />
+              </div>
+              {/* Model name skeleton */}
+              <div className="h-4 w-32 bg-muted rounded mb-1" />
+              {/* Account skeleton */}
+              <div className="h-3 w-24 bg-muted rounded" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Conviction score skeleton */}
+            <div className="h-6 w-12 bg-muted rounded" />
+            {/* Chevron skeleton */}
+            <div className="w-5 h-5 bg-muted rounded" />
+          </div>
+        </div>
+
+        {/* Summary view skeleton */}
+        <div className="mt-3 pt-3 border-t space-y-2">
+          <div className="h-3 w-full bg-muted rounded" />
+          <div className="h-3 w-4/5 bg-muted rounded" />
+          <div className="flex items-center gap-2 mt-2">
+            <div className="h-5 w-16 bg-muted rounded" />
+            <div className="h-5 w-20 bg-muted rounded" />
+            <div className="h-3 w-24 bg-muted rounded ml-2" />
+            <div className="h-3 w-16 bg-muted rounded ml-auto" />
+          </div>
+        </div>
+      </CardHeader>
+    </Card>
+  );
+}
+
 function ResearchPreview({ data }) {
   const [showFullReport, setShowFullReport] = useState(false);
 
@@ -364,6 +408,7 @@ export default function PMsTab() {
     const saved = sessionStorage.getItem('pm_pitches');
     return saved ? JSON.parse(saved) : [];
   });
+  const [loadingPitches, setLoadingPitches] = useState(true);
   const [pollingInterval, setPollingInterval] = useState(null);
 
   // Load research history and market metrics on mount
@@ -494,6 +539,7 @@ export default function PMsTab() {
 
   const loadLatestPitches = async (weekId, researchDate) => {
     try {
+      setLoadingPitches(true);
       let url = '/api/pitches/current';
       const params = new URLSearchParams();
       if (researchDate) params.append('research_date', researchDate);
@@ -515,6 +561,8 @@ export default function PMsTab() {
       }
     } catch (error) {
       console.error('Error loading latest pitches:', error);
+    } finally {
+      setLoadingPitches(false);
     }
   };
 
@@ -881,16 +929,28 @@ export default function PMsTab() {
     </Card>
   );
 
-  const renderPMGrid = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-      {PM_MODELS.map(model => {
-        const pitch = pitches.find(p => (p.model === model.key || p.pm_model === model.key));
-        const progress = modelProgress[model.key];
-        const isGenerating = progress && progress.status === 'running';
+  const renderPMGrid = () => {
+    // Show skeleton cards when loading pitches
+    if (loadingPitches) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <PMPitchCardSkeleton key={i} />
+          ))}
+        </div>
+      );
+    }
 
-        if (isGenerating) {
-          return (
-            <Card key={model.key} className="p-4 border-yellow-500/50">
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        {PM_MODELS.map(model => {
+          const pitch = pitches.find(p => (p.model === model.key || p.pm_model === model.key));
+          const progress = modelProgress[model.key];
+          const isGenerating = progress && progress.status === 'running';
+
+          if (isGenerating) {
+            return (
+              <Card key={model.key} className="p-4 border-yellow-500/50">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="font-semibold text-sm">{model.label}</h4>
@@ -909,78 +969,79 @@ export default function PMsTab() {
                   </div>
                 </div>
               </div>
-            </Card>
-          );
-        }
+              </Card>
+            );
+          }
 
-        if (pitch) {
+          if (pitch) {
+            return (
+              <div key={model.key} className="space-y-3 flex flex-col h-full">
+                <div className="flex-1">
+                  <PMPitchCard pitch={pitch} />
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full text-xs"
+                  onClick={() => handleGeneratePitches(model.key)}
+                  disabled={modelProgress[model.key]?.status === 'running'}
+                >
+                  <RefreshCw className="mr-2 h-3 w-3" /> Generate New Report
+                </Button>
+              </div>
+            );
+          }
+
           return (
             <div key={model.key} className="space-y-3 flex flex-col h-full">
               <div className="flex-1">
-                <PMPitchCard pitch={pitch} />
+                <Card className="p-4 flex flex-col h-full bg-muted/10 border-dashed min-h-[300px]">
+                  <div className="text-center space-y-3 flex-1 flex flex-col justify-center">
+                    <div className="w-12 h-12 rounded-lg bg-white/90 dark:bg-gray-800 flex items-center justify-center p-2 shadow-sm border mx-auto">
+                      {getLogoPath(model.key) ? (
+                        <img
+                          src={getLogoPath(model.key)}
+                          alt={model.label}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <ActivityIcon className="h-6 w-6 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">{model.label}</h3>
+                      <p className="text-xs text-muted-foreground mt-1">{model.account}</p>
+                    </div>
+                    <div className="p-3 bg-muted/30 rounded-md">
+                      <p className="text-sm text-muted-foreground">
+                        No PM report for research date:
+                      </p>
+                      <p className="text-xs font-mono text-muted-foreground mt-1">
+                        {latestReport?.created_at ?
+                          new Date(latestReport.created_at).toLocaleString('en-US', {
+                            timeZone: 'America/New_York',
+                            year: 'numeric', month: '2-digit', day: '2-digit',
+                            hour: '2-digit', minute: '2-digit', hour12: false
+                          }) + ' ET' : 'No research selected'}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
               </div>
               <Button
                 size="sm"
-                variant="outline"
                 className="w-full text-xs"
                 onClick={() => handleGeneratePitches(model.key)}
                 disabled={modelProgress[model.key]?.status === 'running'}
               >
-                <RefreshCw className="mr-2 h-3 w-3" /> Generate New Report
+                <Play className="mr-2 h-3 w-3" /> Generate New Report
               </Button>
             </div>
-          );
-        }
-
-        return (
-          <div key={model.key} className="space-y-3 flex flex-col h-full">
-            <div className="flex-1">
-              <Card className="p-4 flex flex-col h-full bg-muted/10 border-dashed min-h-[300px]">
-                <div className="text-center space-y-3 flex-1 flex flex-col justify-center">
-                  <div className="w-12 h-12 rounded-lg bg-white/90 dark:bg-gray-800 flex items-center justify-center p-2 shadow-sm border mx-auto">
-                    {getLogoPath(model.key) ? (
-                      <img
-                        src={getLogoPath(model.key)}
-                        alt={model.label}
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <ActivityIcon className="h-6 w-6 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground">{model.label}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">{model.account}</p>
-                  </div>
-                  <div className="p-3 bg-muted/30 rounded-md">
-                    <p className="text-sm text-muted-foreground">
-                      No PM report for research date:
-                    </p>
-                    <p className="text-xs font-mono text-muted-foreground mt-1">
-                      {latestReport?.created_at ? 
-                        new Date(latestReport.created_at).toLocaleString('en-US', {
-                          timeZone: 'America/New_York',
-                          year: 'numeric', month: '2-digit', day: '2-digit',
-                          hour: '2-digit', minute: '2-digit', hour12: false
-                        }) + ' ET' : 'No research selected'}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            </div>
-            <Button
-              size="sm"
-              className="w-full text-xs"
-              onClick={() => handleGeneratePitches(model.key)}
-              disabled={modelProgress[model.key]?.status === 'running'}
-            >
-              <Play className="mr-2 h-3 w-3" /> Generate New Report
-            </Button>
-          </div>
-        );
-      })}
-    </div>
-  );
+            );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
