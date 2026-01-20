@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.pipeline.stages.research import get_week_id
 from backend.config import get_cors_origins
 from backend.redis_client import get_redis_client, close_redis_client
+from backend.db.pool import init_pool, close_pool
 
 
 class PipelineState:
@@ -67,6 +68,14 @@ async def startup_event():
     for route in app.routes:
         print(f" - {route.path} [{getattr(route, 'methods', [])}]")
 
+    # Initialize database connection pool
+    try:
+        await init_pool()
+        print("✓ Database connection pool initialized")
+    except Exception as e:
+        print(f"✗ Database pool initialization failed: {e}")
+        print("  Application will continue but database operations may fail")
+
     # Initialize Redis client
     try:
         redis_client = get_redis_client()
@@ -83,6 +92,12 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on application shutdown."""
     print("Shutting down...")
+
+    # Close database connection pool
+    await close_pool()
+    print("✓ Database connection pool closed")
+
+    # Close Redis client
     close_redis_client()
     print("✓ Redis connection closed")
 
