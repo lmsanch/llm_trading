@@ -290,10 +290,9 @@ async def main():
         if not args.skip_metrics and args.command in ["seed", "daily"]:
             print("\n🔄 Running metrics calculation...")
             try:
-                from calculate_metrics import MetricsCalculator
+                from backend.storage.calculate_metrics import MetricsCalculator
                 calculator = MetricsCalculator()
-                # Note: calculate_metrics may need async conversion in future subtask (4.3)
-                calculator.run_all_calculations()
+                await calculator.run_all_calculations()
             except Exception as e:
                 print(f"⚠️  Warning: Metrics calculation failed: {e}")
                 print("   You can run it manually with: python backend/storage/calculate_metrics.py")
