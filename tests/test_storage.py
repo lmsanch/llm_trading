@@ -1579,3 +1579,416 @@ class TestUpdateConversationTitle:
         # Verify title updated
         conv = get_conversation(conversation_id)
         assert conv["title"] == "Updated Title"
+
+
+class TestListConversations:
+    """Test suite for list_conversations function."""
+
+    def test_returns_all_conversations(self, tmp_path, monkeypatch):
+        """Test that list_conversations returns all conversations."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create multiple conversations
+        create_conversation("conv-1")
+        create_conversation("conv-2")
+        create_conversation("conv-3")
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Verify all conversations returned
+        assert len(conversations) == 3
+        conv_ids = {conv["id"] for conv in conversations}
+        assert conv_ids == {"conv-1", "conv-2", "conv-3"}
+
+    def test_includes_only_metadata_fields(self, tmp_path, monkeypatch):
+        """Test that list_conversations includes only metadata (id, created_at, title, message_count)."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-metadata"
+        create_conversation(conversation_id)
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Verify metadata fields
+        assert len(conversations) == 1
+        conv = conversations[0]
+
+        # Should have exactly these 4 fields
+        expected_fields = {"id", "created_at", "title", "message_count"}
+        assert set(conv.keys()) == expected_fields
+
+        # Should NOT have messages field
+        assert "messages" not in conv
+
+    def test_message_count_field(self, tmp_path, monkeypatch):
+        """Test that message_count field is correct."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with no messages
+        conversation_id = "test-conv-count"
+        create_conversation(conversation_id)
+
+        # List conversations
+        conversations = list_conversations()
+        assert conversations[0]["message_count"] == 0
+
+        # Add messages
+        add_user_message(conversation_id, "Message 1")
+        add_user_message(conversation_id, "Message 2")
+        add_assistant_message(conversation_id, [], [], {})
+
+        # List again
+        conversations = list_conversations()
+        assert conversations[0]["message_count"] == 3
+
+    def test_sorted_by_created_at_descending(self, tmp_path, monkeypatch):
+        """Test that conversations are sorted by created_at descending (newest first)."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        import time
+
+        # Create conversations with small delays to ensure different timestamps
+        conv1 = create_conversation("conv-1")
+        time.sleep(0.01)
+        conv2 = create_conversation("conv-2")
+        time.sleep(0.01)
+        conv3 = create_conversation("conv-3")
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Verify sorted by created_at descending (newest first)
+        assert len(conversations) == 3
+        assert conversations[0]["id"] == "conv-3"  # Most recent
+        assert conversations[1]["id"] == "conv-2"
+        assert conversations[2]["id"] == "conv-1"  # Oldest
+
+        # Verify timestamps are in descending order
+        assert conversations[0]["created_at"] >= conversations[1]["created_at"]
+        assert conversations[1]["created_at"] >= conversations[2]["created_at"]
+
+    def test_handles_empty_storage_directory(self, tmp_path, monkeypatch):
+        """Test that list_conversations handles empty storage directory."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # List conversations in empty directory
+        conversations = list_conversations()
+
+        # Should return empty list
+        assert conversations == []
+        assert isinstance(conversations, list)
+
+    def test_includes_conversation_title(self, tmp_path, monkeypatch):
+        """Test that list_conversations includes conversation titles."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with default title
+        create_conversation("conv-1")
+
+        # Create conversation with custom title
+        conversation_id = "conv-2"
+        create_conversation(conversation_id)
+        update_conversation_title(conversation_id, "Custom Title")
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Find each conversation
+        conv1 = next(c for c in conversations if c["id"] == "conv-1")
+        conv2 = next(c for c in conversations if c["id"] == "conv-2")
+
+        # Verify titles
+        assert conv1["title"] == "New Conversation"
+        assert conv2["title"] == "Custom Title"
+
+    def test_includes_created_at_timestamp(self, tmp_path, monkeypatch):
+        """Test that list_conversations includes created_at timestamps."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conv = create_conversation("test-conv")
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Verify timestamp present and matches
+        assert len(conversations) == 1
+        assert "created_at" in conversations[0]
+        assert conversations[0]["created_at"] == conv["created_at"]
+
+        # Verify timestamp is valid ISO format
+        try:
+            datetime.fromisoformat(conversations[0]["created_at"])
+        except ValueError:
+            pytest.fail("created_at is not a valid ISO format timestamp")
+
+    def test_ignores_non_json_files(self, tmp_path, monkeypatch):
+        """Test that list_conversations ignores non-JSON files."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        create_conversation("conv-1")
+
+        # Create non-JSON files in the directory
+        (tmp_path / "readme.txt").write_text("This is not a conversation")
+        (tmp_path / "data.csv").write_text("id,title\n1,Test")
+        (tmp_path / ".hidden").write_text("hidden file")
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Should only return the one JSON conversation
+        assert len(conversations) == 1
+        assert conversations[0]["id"] == "conv-1"
+
+    def test_handles_conversations_with_messages(self, tmp_path, monkeypatch):
+        """Test that list_conversations correctly counts messages."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with multiple messages
+        conversation_id = "conv-with-messages"
+        create_conversation(conversation_id)
+
+        add_user_message(conversation_id, "First message")
+        add_assistant_message(conversation_id, [], [], {})
+        add_user_message(conversation_id, "Second message")
+        add_assistant_message(conversation_id, [], [], {})
+        add_user_message(conversation_id, "Third message")
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Verify message count
+        assert len(conversations) == 1
+        assert conversations[0]["message_count"] == 5
+
+    def test_multiple_conversations_with_different_counts(self, tmp_path, monkeypatch):
+        """Test multiple conversations with different message counts."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversations with different message counts
+        create_conversation("conv-empty")
+
+        conversation_id_1 = "conv-one-msg"
+        create_conversation(conversation_id_1)
+        add_user_message(conversation_id_1, "Message")
+
+        conversation_id_3 = "conv-three-msgs"
+        create_conversation(conversation_id_3)
+        add_user_message(conversation_id_3, "Message 1")
+        add_user_message(conversation_id_3, "Message 2")
+        add_user_message(conversation_id_3, "Message 3")
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Find each conversation
+        conv_empty = next(c for c in conversations if c["id"] == "conv-empty")
+        conv_one = next(c for c in conversations if c["id"] == "conv-one-msg")
+        conv_three = next(c for c in conversations if c["id"] == "conv-three-msgs")
+
+        # Verify message counts
+        assert conv_empty["message_count"] == 0
+        assert conv_one["message_count"] == 1
+        assert conv_three["message_count"] == 3
+
+    def test_returns_new_list_each_time(self, tmp_path, monkeypatch):
+        """Test that list_conversations returns a new list each time."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        create_conversation("conv-1")
+
+        # List conversations twice
+        list1 = list_conversations()
+        list2 = list_conversations()
+
+        # Should be equal but not the same object
+        assert list1 == list2
+        assert list1 is not list2
+
+        # Modifying one shouldn't affect the other
+        list1.append({"id": "fake", "created_at": "2024-01-01", "title": "Fake", "message_count": 0})
+        assert len(list1) == 2
+        assert len(list2) == 1
+
+    def test_handles_missing_title_field(self, tmp_path, monkeypatch):
+        """Test that list_conversations handles missing title field gracefully."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation and manually remove title
+        conversation_id = "conv-no-title"
+        conv = create_conversation(conversation_id)
+
+        # Manually edit file to remove title
+        path = tmp_path / f"{conversation_id}.json"
+        del conv["title"]
+        with open(path, "w") as f:
+            json.dump(conv, f, indent=2)
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Should use default title
+        assert len(conversations) == 1
+        assert conversations[0]["title"] == "New Conversation"
+
+    def test_sorting_with_same_timestamp(self, tmp_path, monkeypatch):
+        """Test sorting behavior when conversations have same timestamp."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversations
+        conv1 = create_conversation("conv-1")
+        conv2 = create_conversation("conv-2")
+
+        # Manually set same timestamp
+        same_timestamp = "2024-01-01T12:00:00.000000"
+        conv1["created_at"] = same_timestamp
+        conv2["created_at"] = same_timestamp
+        save_conversation(conv1)
+        save_conversation(conv2)
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Both should be returned (order may vary but both present)
+        assert len(conversations) == 2
+        conv_ids = {conv["id"] for conv in conversations}
+        assert conv_ids == {"conv-1", "conv-2"}
+
+        # Both should have same timestamp
+        assert conversations[0]["created_at"] == same_timestamp
+        assert conversations[1]["created_at"] == same_timestamp
+
+    def test_handles_unicode_in_title(self, tmp_path, monkeypatch):
+        """Test that list_conversations handles unicode in titles."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with unicode title
+        conversation_id = "conv-unicode"
+        create_conversation(conversation_id)
+        update_conversation_title(conversation_id, "Unicode test: 日本語 🚀 émoji")
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Verify unicode preserved
+        assert len(conversations) == 1
+        assert conversations[0]["title"] == "Unicode test: 日本語 🚀 émoji"
+
+    def test_returns_empty_list_not_none(self, tmp_path, monkeypatch):
+        """Test that list_conversations returns empty list, not None."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # List conversations in empty directory
+        conversations = list_conversations()
+
+        # Should be empty list, not None
+        assert conversations is not None
+        assert conversations == []
+        assert isinstance(conversations, list)
+
+    def test_creates_data_directory_if_missing(self, tmp_path, monkeypatch):
+        """Test that list_conversations creates data directory if missing."""
+        # Use a subdirectory that doesn't exist
+        data_dir = tmp_path / "new_data_dir"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Directory shouldn't exist yet
+        assert not data_dir.exists()
+
+        # List conversations should create it
+        conversations = list_conversations()
+
+        # Directory should now exist
+        assert data_dir.exists()
+        assert data_dir.is_dir()
+
+        # And return empty list
+        assert conversations == []
+
+    def test_large_number_of_conversations(self, tmp_path, monkeypatch):
+        """Test listing a large number of conversations."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        import time
+
+        # Create many conversations
+        num_conversations = 50
+        for i in range(num_conversations):
+            create_conversation(f"conv-{i:03d}")
+            # Small delay to ensure different timestamps
+            if i % 10 == 0:
+                time.sleep(0.01)
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Verify all returned
+        assert len(conversations) == num_conversations
+
+        # Verify all have required fields
+        for conv in conversations:
+            assert "id" in conv
+            assert "created_at" in conv
+            assert "title" in conv
+            assert "message_count" in conv
+
+        # Verify sorted (newest first - higher indices should come first)
+        # Since we created conv-000, conv-001, ..., conv-049 in order,
+        # the newest should be conv-049
+        first_id = conversations[0]["id"]
+        last_id = conversations[-1]["id"]
+
+        # Extract numbers from IDs
+        first_num = int(first_id.split("-")[1])
+        last_num = int(last_id.split("-")[1])
+
+        # First should have higher number than last (newer)
+        assert first_num > last_num
+
+    def test_conversations_with_special_characters_in_id(self, tmp_path, monkeypatch):
+        """Test listing conversations with special characters in IDs."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversations with special characters
+        create_conversation("conv-with-hyphens")
+        create_conversation("conv_with_underscores")
+        create_conversation("conv.with.dots")
+
+        # List conversations
+        conversations = list_conversations()
+
+        # Verify all returned
+        assert len(conversations) == 3
+        conv_ids = {conv["id"] for conv in conversations}
+        assert "conv-with-hyphens" in conv_ids
+        assert "conv_with_underscores" in conv_ids
+        assert "conv.with.dots" in conv_ids
+
+    def test_metadata_matches_full_conversation(self, tmp_path, monkeypatch):
+        """Test that metadata from list_conversations matches full conversation."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with messages and custom title
+        conversation_id = "conv-match"
+        conv = create_conversation(conversation_id)
+        update_conversation_title(conversation_id, "Custom Title")
+        add_user_message(conversation_id, "Message 1")
+        add_user_message(conversation_id, "Message 2")
+
+        # Get full conversation
+        full_conv = get_conversation(conversation_id)
+
+        # Get metadata from list
+        conversations = list_conversations()
+        metadata = conversations[0]
+
+        # Verify metadata matches full conversation
+        assert metadata["id"] == full_conv["id"]
+        assert metadata["created_at"] == full_conv["created_at"]
+        assert metadata["title"] == full_conv["title"]
+        assert metadata["message_count"] == len(full_conv["messages"])
