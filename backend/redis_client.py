@@ -324,6 +324,57 @@ async def close_redis_pool():
         _redis_config = None
 
 
+async def check_redis_health() -> dict:
+    """
+    Check the health and status of the Redis connection pool.
+
+    Returns:
+        dict: Redis health status including:
+            - status: "healthy", "degraded", or "unavailable"
+            - host: Redis server host
+            - port: Redis server port
+            - db: Redis database number
+            - max_connections: Maximum connections in pool
+            - error: Error message if unhealthy
+
+    Example:
+        health = await check_redis_health()
+        if health["status"] != "healthy":
+            logger.warning(f"Redis unhealthy: {health}")
+
+    Notes:
+        - Used by health check endpoints
+        - Safe to call frequently (lightweight operation)
+    """
+    if _redis_pool is None:
+        return {
+            "status": "unavailable",
+            "error": "Pool not initialized"
+        }
+
+    try:
+        # Test Redis connectivity with ping
+        await _redis_pool.ping()
+
+        # Return healthy status with configuration details
+        return {
+            "status": "healthy",
+            "host": _redis_config.host if _redis_config else None,
+            "port": _redis_config.port if _redis_config else None,
+            "db": _redis_config.db if _redis_config else None,
+            "max_connections": _redis_config.max_connections if _redis_config else None,
+        }
+
+    except Exception as e:
+        logger.error(f"Redis health check failed: {e}", exc_info=True)
+        return {
+            "status": "degraded",
+            "error": str(e),
+            "host": _redis_config.host if _redis_config else None,
+            "port": _redis_config.port if _redis_config else None,
+        }
+
+
 # ============================================================================
 # SYNC REDIS CLIENT (Legacy - for backward compatibility)
 # ============================================================================
