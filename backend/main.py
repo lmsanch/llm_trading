@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.pipeline.stages.research import get_week_id
 from backend.config import get_cors_origins
 from backend.redis_client import get_redis_client, close_redis_client
-from backend.db.pool import init_pool, close_pool
+from backend.db.pool import init_pool, close_pool, check_pool_health
 
 
 class PipelineState:
@@ -118,13 +118,15 @@ async def root():
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint that verifies Redis connectivity."""
+    """Health check endpoint that verifies Redis and PostgreSQL pool connectivity."""
     status = {
         "status": "ok",
         "service": "LLM Council API",
-        "redis": "unknown"
+        "redis": "unknown",
+        "database": "unknown"
     }
 
+    # Check Redis connectivity
     try:
         redis_client = get_redis_client()
         if redis_client.ping():
@@ -134,6 +136,20 @@ async def health_check():
             status["status"] = "degraded"
     except Exception as e:
         status["redis"] = f"error: {str(e)}"
+        status["status"] = "degraded"
+
+    # Check PostgreSQL pool health
+    try:
+        pool_health = await check_pool_health()
+        status["database"] = pool_health
+
+        if pool_health["status"] != "healthy":
+            status["status"] = "degraded"
+    except Exception as e:
+        status["database"] = {
+            "status": "error",
+            "error": str(e)
+        }
         status["status"] = "degraded"
 
     return status
