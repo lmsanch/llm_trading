@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
-import { Save, Eye, EyeOff, Check, Key, Search } from 'lucide-react';
+import { Save, Eye, EyeOff, Check, Key, Search, Loader2 } from 'lucide-react';
 
 export default function SettingsTab() {
   const [searchSettings, setSearchSettings] = useState({
@@ -256,7 +256,17 @@ export default function SettingsTab() {
               Discard Changes
             </Button>
             <Button onClick={saveSearchSettings} disabled={isLoading}>
-                <Save className="mr-2 h-4 w-4" /> {isLoading ? 'Saving...' : 'Save Configuration'}
+                {isLoading ? (
+                    <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                    </>
+                ) : (
+                    <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Configuration
+                    </>
+                )}
             </Button>
         </div>
       </div>
