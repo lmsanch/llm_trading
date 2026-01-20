@@ -382,3 +382,336 @@ class TestGetConversationPath:
 
         assert conversation_id in path
         assert path.endswith(".json")
+
+
+class TestGetConversation:
+    """Test suite for get_conversation function."""
+
+    def test_retrieves_existing_conversation(self, tmp_path, monkeypatch):
+        """Test that get_conversation retrieves an existing conversation correctly."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation first
+        conversation_id = "test-conv-retrieve"
+        created_conv = create_conversation(conversation_id)
+
+        # Retrieve it
+        retrieved_conv = get_conversation(conversation_id)
+
+        # Verify it matches what was created
+        assert retrieved_conv is not None
+        assert retrieved_conv == created_conv
+        assert retrieved_conv["id"] == conversation_id
+
+    def test_returns_none_for_nonexistent_conversation(self, tmp_path, monkeypatch):
+        """Test that get_conversation returns None for non-existent conversation."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Try to retrieve a conversation that doesn't exist
+        result = get_conversation("nonexistent-conv-id")
+
+        assert result is None
+
+    def test_parses_json_correctly(self, tmp_path, monkeypatch):
+        """Test that get_conversation correctly parses JSON structure."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-json"
+        create_conversation(conversation_id)
+
+        # Retrieve and verify structure
+        conv = get_conversation(conversation_id)
+
+        assert isinstance(conv, dict)
+        assert "id" in conv
+        assert "created_at" in conv
+        assert "title" in conv
+        assert "messages" in conv
+        assert isinstance(conv["messages"], list)
+
+    def test_retrieves_all_conversation_fields(self, tmp_path, monkeypatch):
+        """Test that all fields are retrieved correctly."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-fields"
+        original = create_conversation(conversation_id)
+
+        # Retrieve it
+        retrieved = get_conversation(conversation_id)
+
+        # Verify all fields match
+        assert retrieved["id"] == original["id"]
+        assert retrieved["created_at"] == original["created_at"]
+        assert retrieved["title"] == original["title"]
+        assert retrieved["messages"] == original["messages"]
+
+    def test_handles_malformed_json_gracefully(self, tmp_path, monkeypatch):
+        """Test that get_conversation handles malformed JSON gracefully."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a file with malformed JSON
+        conversation_id = "test-conv-malformed"
+        file_path = tmp_path / f"{conversation_id}.json"
+
+        with open(file_path, "w") as f:
+            f.write("{ invalid json content }")
+
+        # Try to retrieve it - should raise JSONDecodeError
+        with pytest.raises(json.JSONDecodeError):
+            get_conversation(conversation_id)
+
+    def test_handles_empty_file(self, tmp_path, monkeypatch):
+        """Test behavior with empty JSON file."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create an empty file
+        conversation_id = "test-conv-empty"
+        file_path = tmp_path / f"{conversation_id}.json"
+
+        with open(file_path, "w") as f:
+            f.write("")
+
+        # Try to retrieve it - should raise JSONDecodeError
+        with pytest.raises(json.JSONDecodeError):
+            get_conversation(conversation_id)
+
+    def test_handles_incomplete_json(self, tmp_path, monkeypatch):
+        """Test handling of incomplete JSON structure."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a file with incomplete JSON (missing closing brace)
+        conversation_id = "test-conv-incomplete"
+        file_path = tmp_path / f"{conversation_id}.json"
+
+        with open(file_path, "w") as f:
+            f.write('{"id": "test"')
+
+        # Try to retrieve it - should raise JSONDecodeError
+        with pytest.raises(json.JSONDecodeError):
+            get_conversation(conversation_id)
+
+    def test_retrieves_conversation_with_messages(self, tmp_path, monkeypatch):
+        """Test retrieving a conversation that has messages."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation and add messages manually
+        conversation_id = "test-conv-with-messages"
+        conv = create_conversation(conversation_id)
+
+        # Add some messages
+        conv["messages"].append({"role": "user", "content": "Hello"})
+        conv["messages"].append({"role": "assistant", "content": "Hi there"})
+        save_conversation(conv)
+
+        # Retrieve it
+        retrieved = get_conversation(conversation_id)
+
+        assert len(retrieved["messages"]) == 2
+        assert retrieved["messages"][0]["role"] == "user"
+        assert retrieved["messages"][0]["content"] == "Hello"
+        assert retrieved["messages"][1]["role"] == "assistant"
+
+    def test_retrieves_updated_conversation(self, tmp_path, monkeypatch):
+        """Test that get_conversation retrieves the latest saved version."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-updated"
+        conv = create_conversation(conversation_id)
+
+        # Update it
+        conv["title"] = "Updated Title"
+        save_conversation(conv)
+
+        # Retrieve it
+        retrieved = get_conversation(conversation_id)
+
+        assert retrieved["title"] == "Updated Title"
+
+    def test_multiple_conversations_dont_interfere(self, tmp_path, monkeypatch):
+        """Test that retrieving one conversation doesn't affect others."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create multiple conversations
+        conv1 = create_conversation("conv-1")
+        conv2 = create_conversation("conv-2")
+        conv3 = create_conversation("conv-3")
+
+        # Retrieve them in different order
+        retrieved2 = get_conversation("conv-2")
+        retrieved1 = get_conversation("conv-1")
+        retrieved3 = get_conversation("conv-3")
+
+        # Verify each matches original
+        assert retrieved1["id"] == "conv-1"
+        assert retrieved2["id"] == "conv-2"
+        assert retrieved3["id"] == "conv-3"
+
+    def test_retrieves_conversation_with_special_characters_in_id(self, tmp_path, monkeypatch):
+        """Test retrieving conversation with special characters in ID."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with special characters
+        conversation_id = "test-conv_2024-01-01"
+        create_conversation(conversation_id)
+
+        # Retrieve it
+        retrieved = get_conversation(conversation_id)
+
+        assert retrieved is not None
+        assert retrieved["id"] == conversation_id
+
+    def test_retrieves_conversation_with_uuid_id(self, tmp_path, monkeypatch):
+        """Test retrieving conversation with UUID as ID."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        import uuid
+        conversation_id = str(uuid.uuid4())
+
+        # Create and retrieve
+        create_conversation(conversation_id)
+        retrieved = get_conversation(conversation_id)
+
+        assert retrieved is not None
+        assert retrieved["id"] == conversation_id
+
+    def test_nonexistent_conversation_doesnt_create_file(self, tmp_path, monkeypatch):
+        """Test that trying to retrieve non-existent conversation doesn't create files."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Try to retrieve non-existent conversation
+        result = get_conversation("nonexistent")
+
+        assert result is None
+
+        # Verify no file was created
+        file_path = tmp_path / "nonexistent.json"
+        assert not file_path.exists()
+
+    def test_empty_string_conversation_id(self, tmp_path, monkeypatch):
+        """Test retrieving conversation with empty string ID."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with empty string ID
+        create_conversation("")
+        retrieved = get_conversation("")
+
+        assert retrieved is not None
+        assert retrieved["id"] == ""
+
+    def test_returns_dict_not_reference(self, tmp_path, monkeypatch):
+        """Test that get_conversation returns a new dict (not affecting cached data)."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-dict"
+        original = create_conversation(conversation_id)
+
+        # Retrieve it twice
+        retrieved1 = get_conversation(conversation_id)
+        retrieved2 = get_conversation(conversation_id)
+
+        # Verify they're equal but not the same object
+        assert retrieved1 == retrieved2
+        # Modify one shouldn't affect the other
+        retrieved1["title"] = "Modified"
+        assert retrieved2["title"] == "New Conversation"
+
+    def test_file_permissions_readable(self, tmp_path, monkeypatch):
+        """Test that conversation files are readable after creation."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-permissions"
+        create_conversation(conversation_id)
+
+        # Verify file is readable
+        file_path = tmp_path / f"{conversation_id}.json"
+        assert os.access(file_path, os.R_OK)
+
+        # And we can retrieve it
+        retrieved = get_conversation(conversation_id)
+        assert retrieved is not None
+
+    def test_retrieves_long_conversation_id(self, tmp_path, monkeypatch):
+        """Test retrieving conversation with very long ID."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation with long ID
+        long_id = "test-conv-" + "x" * 200
+        create_conversation(long_id)
+
+        # Retrieve it
+        retrieved = get_conversation(long_id)
+
+        assert retrieved is not None
+        assert retrieved["id"] == long_id
+
+    def test_handles_valid_but_incomplete_conversation_structure(self, tmp_path, monkeypatch):
+        """Test handling valid JSON but missing expected fields."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a file with valid JSON but missing fields
+        conversation_id = "test-conv-missing-fields"
+        file_path = tmp_path / f"{conversation_id}.json"
+
+        with open(file_path, "w") as f:
+            json.dump({"id": conversation_id}, f)  # Missing created_at, title, messages
+
+        # Retrieve it - should succeed but have incomplete structure
+        retrieved = get_conversation(conversation_id)
+
+        assert retrieved is not None
+        assert retrieved["id"] == conversation_id
+        assert "created_at" not in retrieved
+        assert "title" not in retrieved
+        assert "messages" not in retrieved
+
+    def test_handles_json_with_extra_fields(self, tmp_path, monkeypatch):
+        """Test that extra fields in JSON are preserved."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation and add extra field
+        conversation_id = "test-conv-extra"
+        conv = create_conversation(conversation_id)
+        conv["extra_field"] = "extra_value"
+        save_conversation(conv)
+
+        # Retrieve it
+        retrieved = get_conversation(conversation_id)
+
+        assert retrieved["extra_field"] == "extra_value"
+
+    def test_handles_unicode_in_conversation_data(self, tmp_path, monkeypatch):
+        """Test retrieving conversation with unicode characters."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create conversation and add unicode content
+        conversation_id = "test-conv-unicode"
+        conv = create_conversation(conversation_id)
+        conv["title"] = "Test with unicode: 日本語 🚀 émoji"
+        save_conversation(conv)
+
+        # Retrieve it
+        retrieved = get_conversation(conversation_id)
+
+        assert retrieved["title"] == "Test with unicode: 日本語 🚀 émoji"
+
+    def test_retrieves_conversation_after_directory_recreation(self, tmp_path, monkeypatch):
+        """Test that conversations persist across directory operations."""
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", tmp_path)
+
+        # Create a conversation
+        conversation_id = "test-conv-persist"
+        create_conversation(conversation_id)
+
+        # Verify we can retrieve it
+        retrieved1 = get_conversation(conversation_id)
+        assert retrieved1 is not None
+
+        # Retrieve again (simulating restart or reconnection)
+        retrieved2 = get_conversation(conversation_id)
+        assert retrieved2 is not None
+        assert retrieved2 == retrieved1
