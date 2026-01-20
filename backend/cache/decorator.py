@@ -66,7 +66,7 @@ import base64
 from typing import Any, Callable, Optional, Union
 import asyncio
 
-from backend.redis_client import get_redis_client
+from backend.redis_client import get_redis_client, get_redis_pool
 from backend.cache.serializer import serialize, deserialize
 
 logger = logging.getLogger(__name__)
@@ -362,8 +362,8 @@ async def _cached_call(
 
     # Try to get from cache
     try:
-        redis_client = get_redis_client()
-        cached_value = redis_client.get(cache_key)
+        redis_pool = get_redis_pool()
+        cached_value = await redis_pool.get(cache_key)
 
         if cached_value is not None:
             # Cache hit - deserialize and return
@@ -407,7 +407,7 @@ async def _cached_call(
 
     # Cache the result
     try:
-        redis_client = get_redis_client()
+        redis_pool = get_redis_pool()
 
         # Serialize the result
         serialized = serialize(
@@ -422,7 +422,10 @@ async def _cached_call(
             # For msgpack or compressed data, encode to base64
             serialized = base64.b64encode(serialized).decode("ascii")
 
-        success = redis_client.set(cache_key, serialized, ttl=ttl)
+        if ttl:
+            success = await redis_pool.setex(cache_key, ttl, serialized)
+        else:
+            success = await redis_pool.set(cache_key, serialized)
 
         if success:
             logger.info(
@@ -499,12 +502,76 @@ def cache_key_from_args(*arg_names: str) -> Callable:
     return builder
 
 
+async def invalidate_cache_async(
+    key: Optional[str] = None,
+    pattern: Optional[str] = None
+) -> int:
+    """
+    Manually invalidate cache entries (async version).
+
+    This function allows manual cache invalidation by either:
+    - Deleting a specific key
+    - Deleting all keys matching a pattern
+
+    Args:
+        key: Specific cache key to delete
+        pattern: Pattern to match (e.g., "research:*", "market:prices:*")
+
+    Returns:
+        Number of keys deleted
+
+    Examples:
+        # Delete specific key
+        await invalidate_cache_async(key="research:report:abc123")
+
+        # Delete all research caches
+        await invalidate_cache_async(pattern="research:*")
+
+        # Delete all price caches
+        await invalidate_cache_async(pattern="market:prices:*")
+
+    Raises:
+        ValueError: If neither key nor pattern is provided
+
+    Notes:
+        - Use pattern with caution - it can delete many keys at once
+        - Returns 0 if Redis is unavailable or if no keys match
+        - Use this in async contexts (FastAPI routes, async functions)
+    """
+    if key is None and pattern is None:
+        raise ValueError("Either 'key' or 'pattern' must be provided")
+
+    try:
+        redis_pool = get_redis_pool()
+
+        if key is not None:
+            count = await redis_pool.delete(key)
+            logger.info(f"Cache invalidated: {key} (deleted={count})")
+            return count
+        else:
+            # For pattern deletion, we need to get keys first, then delete
+            keys = await redis_pool.keys(pattern)
+            if keys:
+                count = await redis_pool.delete(*keys)
+                logger.info(
+                    f"Cache invalidated by pattern: {pattern} (deleted={count})"
+                )
+                return count
+            else:
+                logger.info(f"No keys matched pattern: {pattern}")
+                return 0
+
+    except Exception as e:
+        logger.error(f"Failed to invalidate cache: {e}")
+        return 0
+
+
 def invalidate_cache(
     key: Optional[str] = None,
     pattern: Optional[str] = None
 ) -> int:
     """
-    Manually invalidate cache entries.
+    Manually invalidate cache entries (sync version).
 
     This function allows manual cache invalidation by either:
     - Deleting a specific key
@@ -533,6 +600,8 @@ def invalidate_cache(
     Notes:
         - Use pattern with caution - it can delete many keys at once
         - Returns 0 if Redis is unavailable or if no keys match
+        - Use this in sync contexts (scripts, sync functions)
+        - For async contexts, use invalidate_cache_async() instead
     """
     if key is None and pattern is None:
         raise ValueError("Either 'key' or 'pattern' must be provided")
