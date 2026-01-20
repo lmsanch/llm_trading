@@ -1522,3 +1522,388 @@ class TestEntryAndExitValidation:
         result = self.stage._parse_pm_pitch(pitch_json, "test_model")
 
         assert result is not None
+
+
+class TestInstrumentValidation:
+    """Test suite for instrument validation logic."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.stage = PMPitchStage()
+
+    def test_instruments_constant_exists(self):
+        """Test that INSTRUMENTS constant is defined."""
+        assert self.stage.INSTRUMENTS is not None
+        assert isinstance(self.stage.INSTRUMENTS, list)
+        assert len(self.stage.INSTRUMENTS) > 0
+
+    def test_instruments_constant_includes_expected_symbols(self):
+        """Test that INSTRUMENTS includes expected symbols."""
+        # These should all be in the instruments list
+        expected_instruments = ["SPY", "QQQ", "IWM", "TLT", "HYG", "UUP", "GLD", "USO"]
+        for instrument in expected_instruments:
+            assert instrument in self.stage.INSTRUMENTS, \
+                f"{instrument} should be in INSTRUMENTS"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_spy_instrument(self):
+        """Test that SPY instrument is accepted."""
+        pitch_json = self._create_pitch_with_instrument("SPY")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "SPY"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_qqq_instrument(self):
+        """Test that QQQ instrument is accepted."""
+        pitch_json = self._create_pitch_with_instrument("QQQ")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "QQQ"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_iwm_instrument(self):
+        """Test that IWM instrument is accepted."""
+        pitch_json = self._create_pitch_with_instrument("IWM")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "IWM"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_tlt_instrument(self):
+        """Test that TLT instrument is accepted."""
+        pitch_json = self._create_pitch_with_instrument("TLT")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "TLT"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_hyg_instrument(self):
+        """Test that HYG instrument is accepted."""
+        pitch_json = self._create_pitch_with_instrument("HYG")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "HYG"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_uup_instrument(self):
+        """Test that UUP instrument is accepted."""
+        pitch_json = self._create_pitch_with_instrument("UUP")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "UUP"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_gld_instrument(self):
+        """Test that GLD instrument is accepted."""
+        pitch_json = self._create_pitch_with_instrument("GLD")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "GLD"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_uso_instrument(self):
+        """Test that USO instrument is accepted."""
+        pitch_json = self._create_pitch_with_instrument("USO")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "USO"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_vixy_instrument(self):
+        """Test that VIXY instrument is accepted."""
+        pitch_json = self._create_pitch_with_instrument("VIXY")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "VIXY"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_sh_instrument(self):
+        """Test that SH instrument is accepted."""
+        pitch_json = self._create_pitch_with_instrument("SH")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "SH"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_flat_instrument(self):
+        """Test that FLAT is accepted as a special instrument."""
+        pitch_json = self._create_flat_pitch_with_instrument("FLAT")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["selected_instrument"] == "FLAT"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_all_valid_instruments_accepted(self):
+        """Test that all instruments in INSTRUMENTS list are accepted."""
+        for instrument in self.stage.INSTRUMENTS:
+            pitch_json = self._create_pitch_with_instrument(instrument)
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is not None, f"Failed for instrument: {instrument}"
+            assert result["selected_instrument"] == instrument
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_invalid_instrument_rejected(self):
+        """Test that invalid instruments are rejected."""
+        pitch_json = self._create_pitch_with_instrument("INVALID")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_lowercase_instrument_rejected(self):
+        """Test that lowercase instrument names are rejected (case-sensitive)."""
+        pitch_json = self._create_pitch_with_instrument("spy")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_mixed_case_instrument_rejected(self):
+        """Test that mixed case instrument names are rejected (case-sensitive)."""
+        pitch_json = self._create_pitch_with_instrument("Spy")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_lowercase_flat_rejected(self):
+        """Test that lowercase 'flat' is rejected."""
+        pitch_json = self._create_flat_pitch_with_instrument("flat")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_non_tradable_stock_rejected(self):
+        """Test that non-tradable stocks are rejected."""
+        invalid_instruments = ["AAPL", "MSFT", "TSLA", "GOOGL", "AMZN"]
+        for instrument in invalid_instruments:
+            pitch_json = self._create_pitch_with_instrument(instrument)
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is None, f"{instrument} should be rejected"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_empty_instrument_rejected(self):
+        """Test that empty instrument string is rejected."""
+        pitch_json = self._create_pitch_with_instrument("")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_instrument_with_spaces_rejected(self):
+        """Test that instrument with spaces is rejected."""
+        pitch_json = self._create_pitch_with_instrument("SP Y")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_instrument_with_special_characters_rejected(self):
+        """Test that instrument with special characters is rejected."""
+        invalid_instruments = ["SPY!", "QQQ@", "IWM#", "$SPY", "SPY-"]
+        for instrument in invalid_instruments:
+            pitch_json = self._create_pitch_with_instrument(instrument)
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is None, f"{instrument} should be rejected"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_numeric_instrument_rejected(self):
+        """Test that numeric instrument is rejected."""
+        pitch_json = """
+        {
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "selected_instrument": 123,
+            "direction": "LONG",
+            "horizon": "1W",
+            "conviction": 1.5,
+            "risk_profile": "BASE",
+            "thesis_bullets": ["Rates: Fed supportive"],
+            "entry_policy": {"mode": "limit", "limit_price": null},
+            "exit_policy": {
+                "time_stop_days": 7,
+                "stop_loss_pct": 0.015,
+                "take_profit_pct": 0.025
+            },
+            "risk_notes": "Monitor Fed signals",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }
+        """
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_null_instrument_rejected(self):
+        """Test that null instrument is rejected."""
+        pitch_json = """
+        {
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "selected_instrument": null,
+            "direction": "LONG",
+            "horizon": "1W",
+            "conviction": 1.5,
+            "risk_profile": "BASE",
+            "thesis_bullets": ["Rates: Fed supportive"],
+            "entry_policy": {"mode": "limit", "limit_price": null},
+            "exit_policy": {
+                "time_stop_days": 7,
+                "stop_loss_pct": 0.015,
+                "take_profit_pct": 0.025
+            },
+            "risk_notes": "Monitor Fed signals",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }
+        """
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_missing_instrument_rejected(self):
+        """Test that missing instrument field is rejected."""
+        pitch_json = """
+        {
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "direction": "LONG",
+            "horizon": "1W",
+            "conviction": 1.5,
+            "risk_profile": "BASE",
+            "thesis_bullets": ["Rates: Fed supportive"],
+            "entry_policy": {"mode": "limit", "limit_price": null},
+            "exit_policy": {
+                "time_stop_days": 7,
+                "stop_loss_pct": 0.015,
+                "take_profit_pct": 0.025
+            },
+            "risk_notes": "Monitor Fed signals",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }
+        """
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_instruments_are_uppercase(self):
+        """Test that all instruments in INSTRUMENTS list are uppercase."""
+        for instrument in self.stage.INSTRUMENTS:
+            assert instrument == instrument.upper(), \
+                f"Instrument {instrument} should be uppercase"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_instruments_list_has_no_duplicates(self):
+        """Test that INSTRUMENTS list has no duplicates."""
+        assert len(self.stage.INSTRUMENTS) == len(set(self.stage.INSTRUMENTS)), \
+            "INSTRUMENTS list should not have duplicates"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_instruments_list_is_not_empty(self):
+        """Test that INSTRUMENTS list is not empty."""
+        assert len(self.stage.INSTRUMENTS) > 0, \
+            "INSTRUMENTS list should not be empty"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_flat_not_in_instruments_list(self):
+        """Test that FLAT is not in the INSTRUMENTS list (it's added separately)."""
+        assert "FLAT" not in self.stage.INSTRUMENTS, \
+            "FLAT should not be in INSTRUMENTS list (it's added at validation time)"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_similar_but_invalid_instruments_rejected(self):
+        """Test that similar but invalid instruments are rejected."""
+        # These look similar to valid instruments but are not exact matches
+        invalid_instruments = ["SPYY", "QQQ1", "IWMM", "TLT1", "HYGG"]
+        for instrument in invalid_instruments:
+            pitch_json = self._create_pitch_with_instrument(instrument)
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is None, f"{instrument} should be rejected"
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_instrument_with_leading_whitespace_rejected(self):
+        """Test that instrument with leading whitespace is rejected."""
+        pitch_json = self._create_pitch_with_instrument(" SPY")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_instrument_with_trailing_whitespace_rejected(self):
+        """Test that instrument with trailing whitespace is rejected."""
+        pitch_json = self._create_pitch_with_instrument("SPY ")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    # ==================== Helper Methods ====================
+
+    def _create_pitch_with_instrument(self, instrument: str) -> str:
+        """Create a pitch JSON with specified instrument.
+
+        Args:
+            instrument: Instrument symbol to use
+
+        Returns:
+            JSON string representing a pitch
+        """
+        return f"""
+        {{
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "selected_instrument": "{instrument}",
+            "direction": "LONG",
+            "horizon": "1W",
+            "conviction": 1.5,
+            "risk_profile": "BASE",
+            "thesis_bullets": [
+                "Rates: Fed policy supportive",
+                "Growth: Strong economic data"
+            ],
+            "entry_policy": {{
+                "mode": "limit",
+                "limit_price": null
+            }},
+            "exit_policy": {{
+                "time_stop_days": 7,
+                "stop_loss_pct": 0.015,
+                "take_profit_pct": 0.025,
+                "exit_before_events": []
+            }},
+            "risk_notes": "Monitor Fed signals and economic data",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }}
+        """
+
+    def _create_flat_pitch_with_instrument(self, instrument: str) -> str:
+        """Create a FLAT pitch JSON with specified instrument.
+
+        Args:
+            instrument: Instrument symbol to use (should be FLAT)
+
+        Returns:
+            JSON string representing a FLAT pitch
+        """
+        return f"""
+        {{
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "selected_instrument": "{instrument}",
+            "direction": "FLAT",
+            "horizon": "1W",
+            "conviction": 0,
+            "risk_profile": null,
+            "thesis_bullets": [
+                "Policy: Insufficient macro clarity for directional trade"
+            ],
+            "entry_policy": {{
+                "mode": "NONE",
+                "limit_price": null
+            }},
+            "exit_policy": null,
+            "risk_notes": "Macro uncertainty requires neutral positioning",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }}
+        """
