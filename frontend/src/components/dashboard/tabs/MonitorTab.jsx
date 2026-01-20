@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -7,6 +7,14 @@ import { mockPositions, mockAccounts } from '../../../lib/mockData';
 import { cn } from "../../../lib/utils";
 
 export default function MonitorTab() {
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+
+  useEffect(() => {
+    // Simulate loading accounts
+    const timer = setTimeout(() => setLoadingAccounts(false), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <div className="space-y-6">
        <div className="flex justify-between items-center">
@@ -21,7 +29,23 @@ export default function MonitorTab() {
 
       {/* Account Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {mockAccounts.map((acc, i) => (
+        {loadingAccounts ? (
+          // Skeleton cards
+          Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-6">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="h-3 w-20 bg-muted animate-pulse rounded"></div>
+                  <div className="h-4 w-4 bg-muted animate-pulse rounded"></div>
+                </div>
+                <div className="h-8 w-32 bg-muted animate-pulse rounded mb-1"></div>
+                <div className="h-4 w-24 bg-muted animate-pulse rounded"></div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          // Real account cards
+          mockAccounts.map((acc, i) => (
             <Card key={i}>
                 <CardContent className="pt-6">
                     <div className="flex justify-between items-start mb-2">
@@ -38,7 +62,8 @@ export default function MonitorTab() {
                     </div>
                 </CardContent>
             </Card>
-        ))}
+          ))
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
