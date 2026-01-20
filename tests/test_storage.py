@@ -1992,3 +1992,369 @@ class TestListConversations:
         assert metadata["created_at"] == full_conv["created_at"]
         assert metadata["title"] == full_conv["title"]
         assert metadata["message_count"] == len(full_conv["messages"])
+
+
+class TestEnsureDataDir:
+    """Test suite for ensure_data_dir function."""
+
+    def test_creates_data_directory_if_missing(self, tmp_path, monkeypatch):
+        """Test that ensure_data_dir creates directory if it doesn't exist."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Directory shouldn't exist yet
+        assert not data_dir.exists()
+
+        # Call ensure_data_dir
+        ensure_data_dir()
+
+        # Directory should now exist
+        assert data_dir.exists()
+        assert data_dir.is_dir()
+
+    def test_creates_parent_directories_if_needed(self, tmp_path, monkeypatch):
+        """Test that ensure_data_dir creates parent directories."""
+        data_dir = tmp_path / "parent" / "nested" / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # None of the directories should exist yet
+        assert not (tmp_path / "parent").exists()
+        assert not data_dir.exists()
+
+        # Call ensure_data_dir
+        ensure_data_dir()
+
+        # All directories should now exist
+        assert (tmp_path / "parent").exists()
+        assert (tmp_path / "parent" / "nested").exists()
+        assert data_dir.exists()
+        assert data_dir.is_dir()
+
+    def test_does_not_error_if_directory_exists(self, tmp_path, monkeypatch):
+        """Test that ensure_data_dir doesn't error if directory already exists."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Create directory manually
+        data_dir.mkdir(parents=True)
+        assert data_dir.exists()
+
+        # Call ensure_data_dir - should not raise error
+        ensure_data_dir()
+
+        # Directory should still exist
+        assert data_dir.exists()
+        assert data_dir.is_dir()
+
+    def test_multiple_calls_are_idempotent(self, tmp_path, monkeypatch):
+        """Test that multiple calls to ensure_data_dir are safe."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Call multiple times
+        ensure_data_dir()
+        ensure_data_dir()
+        ensure_data_dir()
+
+        # Directory should exist once
+        assert data_dir.exists()
+        assert data_dir.is_dir()
+
+    def test_creates_directory_with_correct_permissions(self, tmp_path, monkeypatch):
+        """Test that created directory has appropriate permissions."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        ensure_data_dir()
+
+        # Directory should be readable and writable
+        assert os.access(data_dir, os.R_OK)
+        assert os.access(data_dir, os.W_OK)
+        assert os.access(data_dir, os.X_OK)
+
+    def test_handles_permission_errors_gracefully(self, tmp_path, monkeypatch):
+        """Test that permission errors are raised appropriately."""
+        # Create a directory we can't write to
+        parent_dir = tmp_path / "readonly"
+        parent_dir.mkdir()
+        data_dir = parent_dir / "data"
+
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Make parent directory read-only (no write permission)
+        os.chmod(parent_dir, 0o444)
+
+        try:
+            # This should raise a PermissionError
+            with pytest.raises(PermissionError):
+                ensure_data_dir()
+        finally:
+            # Restore permissions so cleanup works
+            os.chmod(parent_dir, 0o755)
+
+    def test_uses_correct_data_dir_from_config(self, tmp_path, monkeypatch):
+        """Test that ensure_data_dir uses DATA_DIR from config."""
+        data_dir = tmp_path / "custom_data_dir"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        ensure_data_dir()
+
+        # Verify the correct directory was created
+        assert data_dir.exists()
+        assert not (tmp_path / "data").exists()  # Default name shouldn't be used
+
+    def test_handles_deeply_nested_paths(self, tmp_path, monkeypatch):
+        """Test that ensure_data_dir handles deeply nested paths."""
+        data_dir = tmp_path / "a" / "b" / "c" / "d" / "e" / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        ensure_data_dir()
+
+        # All nested directories should exist
+        assert data_dir.exists()
+        assert data_dir.is_dir()
+
+    def test_called_by_create_conversation(self, tmp_path, monkeypatch):
+        """Test that create_conversation calls ensure_data_dir."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Directory doesn't exist yet
+        assert not data_dir.exists()
+
+        # Create conversation should create the directory
+        create_conversation("test-conv")
+
+        # Directory should now exist
+        assert data_dir.exists()
+
+    def test_called_by_save_conversation(self, tmp_path, monkeypatch):
+        """Test that save_conversation calls ensure_data_dir."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Create initial conversation
+        conv = create_conversation("test-conv")
+
+        # Remove directory
+        import shutil
+        shutil.rmtree(data_dir)
+        assert not data_dir.exists()
+
+        # Save conversation should recreate directory
+        save_conversation(conv)
+
+        # Directory should be recreated
+        assert data_dir.exists()
+
+    def test_called_by_list_conversations(self, tmp_path, monkeypatch):
+        """Test that list_conversations calls ensure_data_dir."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Directory doesn't exist yet
+        assert not data_dir.exists()
+
+        # List conversations should create the directory
+        list_conversations()
+
+        # Directory should now exist
+        assert data_dir.exists()
+
+
+class TestPathHandling:
+    """Test suite for path handling functions."""
+
+    def test_get_conversation_path_returns_correct_path(self, tmp_path, monkeypatch):
+        """Test that get_conversation_path returns correct file path."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        conversation_id = "test-conv-123"
+        path = get_conversation_path(conversation_id)
+
+        expected_path = os.path.join(data_dir, f"{conversation_id}.json")
+        assert path == expected_path
+
+    def test_get_conversation_path_with_special_characters(self, tmp_path, monkeypatch):
+        """Test path generation with special characters in ID."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        conversation_id = "conv-with-hyphens_underscores.dots"
+        path = get_conversation_path(conversation_id)
+
+        expected_path = os.path.join(data_dir, f"{conversation_id}.json")
+        assert path == expected_path
+        assert conversation_id in path
+        assert path.endswith(".json")
+
+    def test_get_conversation_path_with_uuid(self, tmp_path, monkeypatch):
+        """Test path generation with UUID as conversation ID."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        conversation_id = "550e8400-e29b-41d4-a716-446655440000"
+        path = get_conversation_path(conversation_id)
+
+        expected_path = os.path.join(data_dir, f"{conversation_id}.json")
+        assert path == expected_path
+
+    def test_get_conversation_path_is_consistent(self, tmp_path, monkeypatch):
+        """Test that get_conversation_path returns consistent paths."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        conversation_id = "test-conv"
+        path1 = get_conversation_path(conversation_id)
+        path2 = get_conversation_path(conversation_id)
+
+        assert path1 == path2
+
+    def test_path_uses_correct_data_dir(self, tmp_path, monkeypatch):
+        """Test that paths use the configured DATA_DIR."""
+        data_dir = tmp_path / "custom_data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        conversation_id = "test-conv"
+        path = get_conversation_path(conversation_id)
+
+        assert str(data_dir) in path
+        assert "custom_data" in path
+
+    def test_path_includes_json_extension(self, tmp_path, monkeypatch):
+        """Test that all paths end with .json extension."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        conversation_ids = [
+            "conv1",
+            "conv-2",
+            "conv_3",
+            "550e8400-e29b-41d4-a716-446655440000",
+        ]
+
+        for conv_id in conversation_ids:
+            path = get_conversation_path(conv_id)
+            assert path.endswith(".json")
+
+    def test_path_handles_empty_string_id(self, tmp_path, monkeypatch):
+        """Test path generation with empty string ID."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        conversation_id = ""
+        path = get_conversation_path(conversation_id)
+
+        # Should still generate a path ending with .json
+        assert path.endswith(".json")
+        assert str(data_dir) in path
+
+    def test_multiple_conversations_have_unique_paths(self, tmp_path, monkeypatch):
+        """Test that different conversation IDs produce unique paths."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        ids = ["conv1", "conv2", "conv3", "conv4", "conv5"]
+        paths = [get_conversation_path(conv_id) for conv_id in ids]
+
+        # All paths should be unique
+        assert len(paths) == len(set(paths))
+
+    def test_path_integration_with_file_operations(self, tmp_path, monkeypatch):
+        """Test that generated paths work with actual file operations."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        conversation_id = "test-file-ops"
+        path = get_conversation_path(conversation_id)
+
+        # Create directory
+        ensure_data_dir()
+
+        # Should be able to write to the path
+        test_data = {"test": "data"}
+        with open(path, "w") as f:
+            json.dump(test_data, f)
+
+        # Should be able to read from the path
+        with open(path, "r") as f:
+            loaded_data = json.load(f)
+
+        assert loaded_data == test_data
+
+    def test_path_with_numeric_conversation_id(self, tmp_path, monkeypatch):
+        """Test path generation with numeric conversation ID."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Numeric IDs might be passed as strings
+        conversation_id = "12345"
+        path = get_conversation_path(conversation_id)
+
+        expected_path = os.path.join(data_dir, "12345.json")
+        assert path == expected_path
+
+    def test_data_dir_constant_is_path_object(self):
+        """Test that DATA_DIR constant is a Path object."""
+        from backend.conversation_storage import DATA_DIR
+
+        assert isinstance(DATA_DIR, Path)
+
+    def test_data_dir_points_to_data_subdirectory(self):
+        """Test that DATA_DIR points to a 'data' subdirectory."""
+        from backend.conversation_storage import DATA_DIR
+
+        # DATA_DIR should end with 'data'
+        assert DATA_DIR.name == "data"
+
+    def test_path_normalization(self, tmp_path, monkeypatch):
+        """Test that paths are normalized correctly."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        conversation_id = "test-conv"
+        path = get_conversation_path(conversation_id)
+
+        # Path should use os.path.join which normalizes paths
+        assert os.path.isabs(path) or not path.startswith("/")
+        assert ".." not in path  # No relative path components
+
+    def test_path_with_long_conversation_id(self, tmp_path, monkeypatch):
+        """Test path generation with very long conversation ID."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        # Very long ID (255 chars is typical filename limit)
+        conversation_id = "a" * 200
+        path = get_conversation_path(conversation_id)
+
+        expected_path = os.path.join(data_dir, f"{conversation_id}.json")
+        assert path == expected_path
+
+    def test_concurrent_path_access(self, tmp_path, monkeypatch):
+        """Test that concurrent path generation is safe."""
+        data_dir = tmp_path / "data"
+        monkeypatch.setattr("backend.conversation_storage.DATA_DIR", data_dir)
+
+        import threading
+
+        paths = []
+
+        def get_path(conv_id):
+            path = get_conversation_path(conv_id)
+            paths.append(path)
+
+        # Create multiple threads accessing paths concurrently
+        threads = [
+            threading.Thread(target=get_path, args=(f"conv-{i}",)) for i in range(10)
+        ]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All paths should be generated correctly
+        assert len(paths) == 10
+        assert len(set(paths)) == 10  # All unique
