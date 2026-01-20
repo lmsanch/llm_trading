@@ -25,9 +25,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import argparse
+import asyncio
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
 # Modern Alpaca SDK
@@ -37,6 +36,8 @@ from alpaca.data.timeframe import TimeFrame
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from backend.db.pool import get_pool, init_pool, close_pool
 
 load_dotenv()
 
@@ -64,40 +65,27 @@ CHECKPOINT_HOURS = [9, 12, 14, 15, 16]
 # ============================================================================
 
 class MarketDataDB:
-    """PostgreSQL database manager for market data."""
+    """PostgreSQL database manager for market data using async connection pool."""
 
     def __init__(self):
-        self.conn = None
+        # No longer stores connection - uses pool from get_pool()
+        pass
 
-    def connect(self):
-        """Connect to PostgreSQL database using peer authentication."""
-        self.conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER
-            # No password - uses peer authentication
-        )
-        print(f"✅ Connected to database: {DB_NAME}")
-
-    def close(self):
-        """Close database connection."""
-        if self.conn:
-            self.conn.close()
-            print("✅ Database connection closed")
-
-    def insert_daily_bar(self, symbol: str, bar: Dict[str, Any]) -> bool:
-        """Insert or update a daily bar."""
+    async def insert_daily_bar(self, symbol: str, bar: Dict[str, Any]) -> bool:
+        """Insert or update a daily bar using async pool."""
         try:
-            with self.conn.cursor() as cur:
-                cur.execute("""
+            pool = get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("""
                     INSERT INTO daily_bars (symbol, date, open, high, low, close, volume)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ON CONFLICT (symbol, date) DO UPDATE SET
                         open = EXCLUDED.open,
                         high = EXCLUDED.high,
                         low = EXCLUDED.low,
                         close = EXCLUDED.close,
                         volume = EXCLUDED.volume
-                """, (
+                """,
                     symbol,
                     bar["date"],
                     float(bar["open"]),
@@ -105,22 +93,20 @@ class MarketDataDB:
                     float(bar["low"]),
                     float(bar["close"]),
                     int(bar["volume"])
-                ))
-            self.conn.commit()
+                )
             return True
         except Exception as e:
             print(f"  ❌ Error inserting bar for {symbol}: {e}")
-            self.conn.rollback()
             return False
 
-    def log_fetch(self, fetch_type: str, symbol: str, success: bool, error: str = None):
-        """Log a fetch attempt."""
-        with self.conn.cursor() as cur:
-            cur.execute("""
+    async def log_fetch(self, fetch_type: str, symbol: str, success: bool, error: str = None):
+        """Log a fetch attempt using async pool."""
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("""
                 INSERT INTO fetch_log (fetch_type, symbol, status, error_message)
-                VALUES (%s, %s, %s, %s)
-            """, (fetch_type, symbol, 'success' if success else 'error', error))
-        self.conn.commit()
+                VALUES ($1, $2, $3, $4)
+            """, fetch_type, symbol, 'success' if success else 'error', error)
 
 
 # ============================================================================
@@ -140,7 +126,7 @@ class AlpacaMarketDataFetcher:
         self.client = StockHistoricalDataClient(ALPACA_API_KEY, ALPACA_SECRET_KEY)
         print(f"✅ Initialized Alpaca data client")
 
-    def seed_initial_data(self, days: int = 180):
+    async def seed_initial_data(self, days: int = 180):
         """
         Seed database with initial historical data.
 
@@ -149,8 +135,6 @@ class AlpacaMarketDataFetcher:
         """
         print(f"\n🌱 Seeding initial data: Last {days} days")
         print("=" * 60)
-
-        self.db.connect()
 
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days + 10)  # Extra buffer for weekends
@@ -169,13 +153,13 @@ class AlpacaMarketDataFetcher:
 
                 # Fetch bars
                 bars_response = self.client.get_stock_bars(request_params)
-                
+
                 # Convert to DataFrame for easier processing
                 df = bars_response.df
-                
+
                 if df.empty:
                     print(f"  ⚠️  No bars returned for {symbol}")
-                    self.db.log_fetch("seed", symbol, False, "No data returned")
+                    await self.db.log_fetch("seed", symbol, False, "No data returned")
                     continue
 
                 # Insert each bar into database
@@ -192,28 +176,25 @@ class AlpacaMarketDataFetcher:
                         "close": float(row['close']),
                         "volume": int(row['volume'])
                     }
-                    if self.db.insert_daily_bar(symbol, bar_data):
+                    if await self.db.insert_daily_bar(symbol, bar_data):
                         inserted += 1
 
                 print(f"  ✅ Inserted {inserted} bars for {symbol}")
-                self.db.log_fetch("seed", symbol, True)
+                await self.db.log_fetch("seed", symbol, True)
 
             except Exception as e:
                 print(f"  ❌ Error fetching {symbol}: {e}")
-                self.db.log_fetch("seed", symbol, False, str(e))
+                await self.db.log_fetch("seed", symbol, False, str(e))
 
-        self.db.close()
         print("\n✅ Initial data seeding complete")
 
-    def update_daily_bars(self):
+    async def update_daily_bars(self):
         """
         Update daily bars (run after market close).
         Fetches the last 5 days to ensure we catch any missed days.
         """
         print(f"\n📈 Updating daily bars")
         print("=" * 60)
-
-        self.db.connect()
 
         end_date = datetime.now()
         start_date = end_date - timedelta(days=5)
@@ -248,17 +229,16 @@ class AlpacaMarketDataFetcher:
                         "close": float(row['close']),
                         "volume": int(row['volume'])
                     }
-                    if self.db.insert_daily_bar(symbol, bar_data):
+                    if await self.db.insert_daily_bar(symbol, bar_data):
                         inserted += 1
 
                 print(f"  ✅ Updated {inserted} bars for {symbol}")
-                self.db.log_fetch("daily", symbol, True)
+                await self.db.log_fetch("daily", symbol, True)
 
             except Exception as e:
                 print(f"  ❌ Error updating {symbol}: {e}")
-                self.db.log_fetch("daily", symbol, False, str(e))
+                await self.db.log_fetch("daily", symbol, False, str(e))
 
-        self.db.close()
         print("\n✅ Daily update complete")
 
 
@@ -266,7 +246,7 @@ class AlpacaMarketDataFetcher:
 # MAIN
 # ============================================================================
 
-def main():
+async def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
         description="Market Data Fetcher using alpaca-py SDK",
@@ -292,27 +272,36 @@ def main():
 
     args = parser.parse_args()
 
-    fetcher = AlpacaMarketDataFetcher()
+    # Initialize database connection pool
+    await init_pool()
 
-    if args.command == "seed":
-        fetcher.seed_initial_data(days=args.days)
-    elif args.command == "daily":
-        fetcher.update_daily_bars()
-    elif args.command == "hourly":
-        print("⚠️  Hourly snapshots not yet implemented")
-        # TODO: Implement hourly snapshots if needed
+    try:
+        fetcher = AlpacaMarketDataFetcher()
 
-    # Automatically calculate metrics after fetching data
-    if not args.skip_metrics and args.command in ["seed", "daily"]:
-        print("\n🔄 Running metrics calculation...")
-        try:
-            from calculate_metrics import MetricsCalculator
-            calculator = MetricsCalculator()
-            calculator.run_all_calculations()
-        except Exception as e:
-            print(f"⚠️  Warning: Metrics calculation failed: {e}")
-            print("   You can run it manually with: python backend/storage/calculate_metrics.py")
+        if args.command == "seed":
+            await fetcher.seed_initial_data(days=args.days)
+        elif args.command == "daily":
+            await fetcher.update_daily_bars()
+        elif args.command == "hourly":
+            print("⚠️  Hourly snapshots not yet implemented")
+            # TODO: Implement hourly snapshots if needed
+
+        # Automatically calculate metrics after fetching data
+        if not args.skip_metrics and args.command in ["seed", "daily"]:
+            print("\n🔄 Running metrics calculation...")
+            try:
+                from calculate_metrics import MetricsCalculator
+                calculator = MetricsCalculator()
+                # Note: calculate_metrics may need async conversion in future subtask (4.3)
+                calculator.run_all_calculations()
+            except Exception as e:
+                print(f"⚠️  Warning: Metrics calculation failed: {e}")
+                print("   You can run it manually with: python backend/storage/calculate_metrics.py")
+
+    finally:
+        # Close database connection pool
+        await close_pool()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
