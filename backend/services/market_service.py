@@ -75,7 +75,7 @@ class MarketService:
             - correlation_matrix: Contains pairwise correlations by symbol/date
         """
         try:
-            metrics = fetch_market_metrics()
+            metrics = await fetch_market_metrics()
             if metrics is None:
                 logger.warning("Failed to fetch market metrics from database")
             return metrics
@@ -103,7 +103,7 @@ class MarketService:
             SPY, QQQ, IWM, TLT, HYG, UUP, GLD, USO, VIXY, SH
         """
         try:
-            prices = fetch_current_prices()
+            prices = await fetch_current_prices()
             if prices is None:
                 logger.warning("Failed to fetch current prices from database")
             return prices
