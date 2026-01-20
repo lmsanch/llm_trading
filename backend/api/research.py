@@ -219,7 +219,7 @@ async def get_latest_research() -> Dict[str, Any]:
         }
     """
     try:
-        result = research_service.get_latest_research()
+        result = await research_service.get_latest_research()
         return result
     except Exception as e:
         logger.error(f"Error in get_latest_research endpoint: {e}", exc_info=True)
@@ -434,7 +434,7 @@ async def get_research_history(days: int = 90) -> Dict[str, Any]:
         }
     """
     try:
-        result = research_service.get_research_history(days=days)
+        result = await research_service.get_research_history(days=days)
         return result
     except Exception as e:
         logger.error(f"Error in get_research_history endpoint: {e}", exc_info=True)
@@ -590,7 +590,7 @@ async def get_research_report(report_id: str) -> Dict[str, Any]:
         }
     """
     try:
-        result = research_service.get_research_by_id(report_id)
+        result = await research_service.get_research_by_id(report_id)
 
         if not result:
             logger.warning(f"Research report not found: {report_id}")
@@ -638,7 +638,7 @@ async def get_latest_graphs() -> Dict[str, Any]:
         }
     """
     try:
-        result = research_service.get_latest_graphs()
+        result = await research_service.get_latest_graphs()
         return result
     except Exception as e:
         logger.error(f"Error in get_latest_graphs endpoint: {e}", exc_info=True)
