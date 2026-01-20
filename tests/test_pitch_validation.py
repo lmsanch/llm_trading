@@ -476,6 +476,340 @@ class TestRiskProfileValidation:
         """
 
 
+class TestConvictionValidation:
+    """Test suite for conviction value validation."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.stage = PMPitchStage()
+
+    def test_conviction_constants(self):
+        """Test that conviction min/max constants are defined correctly."""
+        assert self.stage.CONVICTION_MIN == -2
+        assert self.stage.CONVICTION_MAX == 2
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_conviction_positive_boundary(self):
+        """Test that conviction of +2 (max) is accepted."""
+        pitch_json = self._create_pitch_with_conviction(2.0, "LONG")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["conviction"] == 2.0
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_conviction_negative_boundary(self):
+        """Test that conviction of -2 (min) is accepted."""
+        pitch_json = self._create_pitch_with_conviction(-2.0, "SHORT")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["conviction"] == -2.0
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_conviction_zero(self):
+        """Test that conviction of 0 is accepted for FLAT."""
+        pitch_json = self._create_flat_pitch_with_conviction(0)
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is not None
+        assert result["conviction"] == 0
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_conviction_positive_mid_range(self):
+        """Test that positive mid-range convictions are accepted."""
+        for conviction in [0.5, 1.0, 1.5]:
+            pitch_json = self._create_pitch_with_conviction(conviction, "LONG")
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is not None
+            assert result["conviction"] == conviction
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_valid_conviction_negative_mid_range(self):
+        """Test that negative mid-range convictions are accepted."""
+        for conviction in [-0.5, -1.0, -1.5]:
+            pitch_json = self._create_pitch_with_conviction(conviction, "SHORT")
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is not None
+            assert result["conviction"] == conviction
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_above_max_rejected(self):
+        """Test that conviction above +2 is rejected."""
+        pitch_json = self._create_pitch_with_conviction(2.1, "LONG")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_below_min_rejected(self):
+        """Test that conviction below -2 is rejected."""
+        pitch_json = self._create_pitch_with_conviction(-2.1, "SHORT")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_way_above_max_rejected(self):
+        """Test that conviction way above range is rejected."""
+        pitch_json = self._create_pitch_with_conviction(10.0, "LONG")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_way_below_min_rejected(self):
+        """Test that conviction way below range is rejected."""
+        pitch_json = self._create_pitch_with_conviction(-10.0, "SHORT")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_decimal_precision(self):
+        """Test that decimal conviction values are handled correctly."""
+        for conviction in [1.234, 1.9999, -1.567, -1.001]:
+            direction = "LONG" if conviction > 0 else "SHORT"
+            pitch_json = self._create_pitch_with_conviction(conviction, direction)
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is not None
+            assert result["conviction"] == conviction
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_integer_values(self):
+        """Test that integer conviction values are accepted."""
+        for conviction in [-2, -1, 1, 2]:
+            direction = "LONG" if conviction > 0 else "SHORT"
+            pitch_json = self._create_pitch_with_conviction(conviction, direction)
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is not None
+            assert result["conviction"] == conviction
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_flat_with_non_zero_conviction_rejected(self):
+        """Test that FLAT direction with non-zero conviction is rejected."""
+        for conviction in [0.1, -0.1, 1.0, -1.0]:
+            pitch_json = self._create_flat_pitch_with_conviction(conviction)
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_long_with_negative_conviction_rejected(self):
+        """Test that LONG direction with negative conviction is rejected."""
+        for conviction in [-0.5, -1.0, -2.0]:
+            pitch_json = self._create_pitch_with_conviction(conviction, "LONG")
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_long_with_zero_conviction_rejected(self):
+        """Test that LONG direction with zero conviction is rejected."""
+        pitch_json = self._create_pitch_with_conviction(0, "LONG")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_short_with_positive_conviction_rejected(self):
+        """Test that SHORT direction with positive conviction is rejected."""
+        for conviction in [0.5, 1.0, 2.0]:
+            pitch_json = self._create_pitch_with_conviction(conviction, "SHORT")
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_short_with_zero_conviction_rejected(self):
+        """Test that SHORT direction with zero conviction is rejected."""
+        pitch_json = self._create_pitch_with_conviction(0, "SHORT")
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_string_rejected(self):
+        """Test that string conviction values are rejected."""
+        pitch_json = """
+        {
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "selected_instrument": "SPY",
+            "direction": "LONG",
+            "horizon": "1W",
+            "conviction": "1.5",
+            "risk_profile": "BASE",
+            "thesis_bullets": ["Rates: Fed supportive"],
+            "entry_policy": {"mode": "limit", "limit_price": null},
+            "exit_policy": {
+                "time_stop_days": 7,
+                "stop_loss_pct": 0.015,
+                "take_profit_pct": 0.025
+            },
+            "risk_notes": "Monitor Fed signals",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }
+        """
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_null_rejected(self):
+        """Test that null conviction values are rejected."""
+        pitch_json = """
+        {
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "selected_instrument": "SPY",
+            "direction": "LONG",
+            "horizon": "1W",
+            "conviction": null,
+            "risk_profile": "BASE",
+            "thesis_bullets": ["Rates: Fed supportive"],
+            "entry_policy": {"mode": "limit", "limit_price": null},
+            "exit_policy": {
+                "time_stop_days": 7,
+                "stop_loss_pct": 0.015,
+                "take_profit_pct": 0.025
+            },
+            "risk_notes": "Monitor Fed signals",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }
+        """
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_missing_rejected(self):
+        """Test that missing conviction field is rejected."""
+        pitch_json = """
+        {
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "selected_instrument": "FLAT",
+            "direction": "FLAT",
+            "horizon": "1W",
+            "risk_profile": null,
+            "thesis_bullets": ["Policy: Insufficient clarity"],
+            "entry_policy": {"mode": "NONE", "limit_price": null},
+            "exit_policy": null,
+            "risk_notes": "Neutral positioning",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }
+        """
+        result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+        assert result is None  # Rejected because conviction is required
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_exact_boundary_edge_cases(self):
+        """Test exact boundary values with floating point edge cases."""
+        # Test exactly at boundaries
+        for conviction in [2.0, -2.0, 2, -2]:
+            direction = "LONG" if conviction > 0 else "SHORT"
+            pitch_json = self._create_pitch_with_conviction(conviction, direction)
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is not None
+
+        # Test just outside boundaries
+        for conviction in [2.00001, -2.00001]:
+            direction = "LONG" if conviction > 0 else "SHORT"
+            pitch_json = self._create_pitch_with_conviction(conviction, direction)
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is None  # Rejected
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_small_positive_values(self):
+        """Test small positive conviction values near zero."""
+        for conviction in [0.001, 0.01, 0.1]:
+            pitch_json = self._create_pitch_with_conviction(conviction, "LONG")
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is not None
+            assert result["conviction"] == conviction
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_conviction_small_negative_values(self):
+        """Test small negative conviction values near zero."""
+        for conviction in [-0.001, -0.01, -0.1]:
+            pitch_json = self._create_pitch_with_conviction(conviction, "SHORT")
+            result = self.stage._parse_pm_pitch(pitch_json, "test_model")
+            assert result is not None
+            assert result["conviction"] == conviction
+
+    # ==================== Helper Methods ====================
+
+    def _create_pitch_with_conviction(
+        self,
+        conviction: float,
+        direction: str = "LONG"
+    ) -> str:
+        """Create a pitch JSON with specified conviction and direction.
+
+        Args:
+            conviction: Conviction value to use
+            direction: Trade direction (LONG or SHORT)
+
+        Returns:
+            JSON string representing a pitch
+        """
+        return f"""
+        {{
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "selected_instrument": "SPY",
+            "direction": "{direction}",
+            "horizon": "1W",
+            "conviction": {conviction},
+            "risk_profile": "BASE",
+            "thesis_bullets": [
+                "Rates: Fed policy supportive",
+                "Growth: Strong economic data"
+            ],
+            "entry_policy": {{
+                "mode": "limit",
+                "limit_price": null
+            }},
+            "exit_policy": {{
+                "time_stop_days": 7,
+                "stop_loss_pct": 0.015,
+                "take_profit_pct": 0.025,
+                "exit_before_events": []
+            }},
+            "risk_notes": "Monitor Fed signals and economic data",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }}
+        """
+
+    def _create_flat_pitch_with_conviction(self, conviction: float) -> str:
+        """Create a FLAT pitch JSON with specified conviction.
+
+        Args:
+            conviction: Conviction value to use
+
+        Returns:
+            JSON string representing a FLAT pitch
+        """
+        return f"""
+        {{
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "selected_instrument": "FLAT",
+            "direction": "FLAT",
+            "horizon": "1W",
+            "conviction": {conviction},
+            "risk_profile": null,
+            "thesis_bullets": [
+                "Policy: Insufficient macro clarity for directional trade"
+            ],
+            "entry_policy": {{
+                "mode": "NONE",
+                "limit_price": null
+            }},
+            "exit_policy": null,
+            "risk_notes": "Macro uncertainty requires neutral positioning",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }}
+        """
+
+
 class TestEntryAndExitValidation:
     """Test suite for entry mode and exit event validation."""
 
