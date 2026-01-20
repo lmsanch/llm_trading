@@ -351,3 +351,660 @@ class TestPositionSizingIntegration:
         # If conviction is not in the mapping, should return 0.0
         size = execution_stage.calculate_position_size(None)
         assert size == 0.0, "None conviction should return 0.0"
+
+
+# ==================== TRADE PREPARATION TESTS ====================
+
+
+class TestPrepareTradeFromChairmanDecision:
+    """Test suite for _prepare_trade method with chairman decisions."""
+
+    @pytest.fixture
+    def execution_stage(self):
+        """Create an ExecutionStage instance for testing."""
+        return ExecutionStage()
+
+    def test_prepare_trade_from_chairman_decision_long(self, execution_stage):
+        """Test preparing trade from chairman decision for LONG position."""
+        chairman_decision = {
+            "account": "Council",
+            "alpaca_id": "council_alpaca_id",
+            "model": "anthropic/claude-opus",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.5,
+        }
+
+        trade = execution_stage._prepare_trade(chairman_decision, "council")
+
+        assert trade is not None
+        assert trade["instrument"] == "SPY"
+        assert trade["direction"] == "LONG"
+        assert trade["side"] == "buy"
+        assert trade["conviction"] == 1.5
+        assert trade["position_size"] == 0.25
+        assert trade["account"] == "Council"
+        assert trade["alpaca_id"] == "council_alpaca_id"
+        assert trade["model"] == "anthropic/claude-opus"
+        assert trade["source"] == "council"
+        assert trade["approved"] is False
+        assert trade["order_status"] == "pending"
+        assert "trade_id" in trade
+        assert "timestamp" in trade
+
+    def test_prepare_trade_from_chairman_decision_short(self, execution_stage):
+        """Test preparing trade from chairman decision for SHORT position."""
+        chairman_decision = {
+            "account": "Council",
+            "alpaca_id": "council_alpaca_id",
+            "model": "anthropic/claude-opus",
+            "instrument": "TLT",
+            "direction": "SHORT",
+            "conviction": -1.0,
+        }
+
+        trade = execution_stage._prepare_trade(chairman_decision, "council")
+
+        assert trade is not None
+        assert trade["instrument"] == "TLT"
+        assert trade["direction"] == "SHORT"
+        assert trade["side"] == "sell"
+        assert trade["conviction"] == -1.0
+        assert trade["position_size"] == 0.50
+
+    def test_prepare_trade_chairman_flat_returns_none(self, execution_stage):
+        """Test that chairman FLAT decision returns None (no execution)."""
+        chairman_decision = {
+            "account": "Council",
+            "alpaca_id": "council_alpaca_id",
+            "model": "anthropic/claude-opus",
+            "instrument": "NONE",
+            "direction": "FLAT",
+            "conviction": 0.0,
+        }
+
+        trade = execution_stage._prepare_trade(chairman_decision, "council")
+
+        assert trade is None, "FLAT decisions should not generate trades"
+
+    def test_prepare_trade_chairman_high_conviction(self, execution_stage):
+        """Test chairman decision with very high conviction (2.0)."""
+        chairman_decision = {
+            "account": "Council",
+            "alpaca_id": "council_alpaca_id",
+            "model": "anthropic/claude-opus",
+            "instrument": "GLD",
+            "direction": "LONG",
+            "conviction": 2.0,
+        }
+
+        trade = execution_stage._prepare_trade(chairman_decision, "council")
+
+        assert trade is not None
+        assert trade["conviction"] == 2.0
+        assert trade["position_size"] == 0.10  # Very high conviction = small position
+
+
+class TestPrepareTradeFromPMPitch:
+    """Test suite for _prepare_trade method with PM pitches."""
+
+    @pytest.fixture
+    def execution_stage(self):
+        """Create an ExecutionStage instance for testing."""
+        return ExecutionStage()
+
+    def test_prepare_trade_from_pm_pitch_long(self, execution_stage, valid_long_pitch):
+        """Test preparing trade from PM pitch for LONG position."""
+        # Add required account and alpaca_id fields
+        valid_long_pitch["account"] = "GPT-5.1"
+        valid_long_pitch["alpaca_id"] = "gpt51_alpaca_id"
+        valid_long_pitch["conviction"] = 1.0
+
+        trade = execution_stage._prepare_trade(valid_long_pitch, valid_long_pitch["model"])
+
+        assert trade is not None
+        assert trade["instrument"] == valid_long_pitch["instrument"]
+        assert trade["direction"] == "LONG"
+        assert trade["side"] == "buy"
+        assert trade["conviction"] == 1.0
+        assert trade["position_size"] == 0.50
+        assert trade["account"] == "GPT-5.1"
+        assert trade["model"] == valid_long_pitch["model"]
+        assert trade["source"] == valid_long_pitch["model"]
+
+    def test_prepare_trade_from_pm_pitch_short(self, execution_stage, valid_short_pitch):
+        """Test preparing trade from PM pitch for SHORT position."""
+        # Add required account and alpaca_id fields
+        valid_short_pitch["account"] = "Sonnet-4.5"
+        valid_short_pitch["alpaca_id"] = "sonnet45_alpaca_id"
+        valid_short_pitch["conviction"] = -1.5
+
+        trade = execution_stage._prepare_trade(valid_short_pitch, valid_short_pitch["model"])
+
+        assert trade is not None
+        assert trade["instrument"] == valid_short_pitch["instrument"]
+        assert trade["direction"] == "SHORT"
+        assert trade["side"] == "sell"
+        assert trade["conviction"] == -1.5
+        assert trade["position_size"] == 0.25
+
+    def test_prepare_trade_pm_flat_returns_none(self, execution_stage, valid_flat_pitch):
+        """Test that PM FLAT pitch returns None (no execution)."""
+        valid_flat_pitch["account"] = "Gemini-3"
+        valid_flat_pitch["alpaca_id"] = "gemini3_alpaca_id"
+
+        trade = execution_stage._prepare_trade(valid_flat_pitch, valid_flat_pitch["model"])
+
+        assert trade is None, "FLAT pitches should not generate trades"
+
+    def test_prepare_trade_pm_low_conviction(self, execution_stage):
+        """Test PM pitch with low conviction (0.5)."""
+        pm_pitch = {
+            "account": "Grok",
+            "alpaca_id": "grok_alpaca_id",
+            "model": "x-ai/grok-beta",
+            "instrument": "IWM",
+            "direction": "LONG",
+            "conviction": 0.5,
+        }
+
+        trade = execution_stage._prepare_trade(pm_pitch, pm_pitch["model"])
+
+        assert trade is not None
+        assert trade["conviction"] == 0.5
+        assert trade["position_size"] == 0.75  # Low conviction = large position
+
+
+class TestPrepareTradeQuantityCalculation:
+    """Test suite for quantity calculation in _prepare_trade."""
+
+    @pytest.fixture
+    def execution_stage(self):
+        """Create an ExecutionStage instance for testing."""
+        return ExecutionStage()
+
+    def test_qty_calculation_50_percent_position(self, execution_stage):
+        """Test qty calculation for 50% position size."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,  # 50% position
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        # $100,000 * 0.50 = $50,000
+        assert trade["qty"] == 50000
+
+    def test_qty_calculation_75_percent_position(self, execution_stage):
+        """Test qty calculation for 75% position size."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "QQQ",
+            "direction": "LONG",
+            "conviction": 0.5,  # 75% position
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        # $100,000 * 0.75 = $75,000
+        assert trade["qty"] == 75000
+
+    def test_qty_calculation_25_percent_position(self, execution_stage):
+        """Test qty calculation for 25% position size."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "GLD",
+            "direction": "LONG",
+            "conviction": 1.5,  # 25% position
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        # $100,000 * 0.25 = $25,000
+        assert trade["qty"] == 25000
+
+    def test_qty_calculation_10_percent_position(self, execution_stage):
+        """Test qty calculation for 10% position size (very high conviction)."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "USO",
+            "direction": "LONG",
+            "conviction": 2.0,  # 10% position
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        # $100,000 * 0.10 = $10,000
+        assert trade["qty"] == 10000
+
+    def test_qty_minimum_one_share(self, execution_stage):
+        """Test that qty is at least 1 share even for very small positions."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 2.0,  # 10% position = $10,000
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        # Even if position is small, qty should be >= 1
+        assert trade["qty"] >= 1
+
+
+class TestPrepareTradeFieldValidation:
+    """Test suite for field validation in _prepare_trade."""
+
+    @pytest.fixture
+    def execution_stage(self):
+        """Create an ExecutionStage instance for testing."""
+        return ExecutionStage()
+
+    def test_prepare_trade_includes_all_required_fields(self, execution_stage):
+        """Test that prepared trade includes all required fields."""
+        decision = {
+            "account": "Test Account",
+            "alpaca_id": "test_alpaca_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "council")
+
+        required_fields = [
+            "trade_id",
+            "account",
+            "alpaca_id",
+            "model",
+            "source",
+            "instrument",
+            "direction",
+            "side",
+            "qty",
+            "position_size",
+            "conviction",
+            "approved",
+            "order_id",
+            "order_status",
+            "timestamp",
+        ]
+
+        for field in required_fields:
+            assert field in trade, f"Missing required field: {field}"
+
+    def test_prepare_trade_side_buy_for_long(self, execution_stage):
+        """Test that LONG direction maps to 'buy' side."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade["side"] == "buy"
+
+    def test_prepare_trade_side_sell_for_short(self, execution_stage):
+        """Test that SHORT direction maps to 'sell' side."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "TLT",
+            "direction": "SHORT",
+            "conviction": -1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade["side"] == "sell"
+
+    def test_prepare_trade_approved_defaults_false(self, execution_stage):
+        """Test that approved field defaults to False."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade["approved"] is False
+
+    def test_prepare_trade_order_id_null(self, execution_stage):
+        """Test that order_id is None before execution."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade["order_id"] is None
+
+    def test_prepare_trade_order_status_pending(self, execution_stage):
+        """Test that order_status defaults to 'pending'."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade["order_status"] == "pending"
+
+    def test_prepare_trade_timestamp_is_iso_format(self, execution_stage):
+        """Test that timestamp is in ISO 8601 format."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        # Should be able to parse as ISO 8601
+        from datetime import datetime
+        timestamp = datetime.fromisoformat(trade["timestamp"].replace("Z", "+00:00"))
+        assert timestamp is not None
+
+
+class TestPrepareTradeEdgeCases:
+    """Test suite for edge cases in _prepare_trade."""
+
+    @pytest.fixture
+    def execution_stage(self):
+        """Create an ExecutionStage instance for testing."""
+        return ExecutionStage()
+
+    def test_prepare_trade_invalid_conviction_returns_none(self, execution_stage):
+        """Test that invalid conviction (not in POSITION_SIZING) returns None."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 0.75,  # Invalid: not in POSITION_SIZING
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade is None, "Invalid conviction should return None"
+
+    def test_prepare_trade_zero_position_size_returns_none(self, execution_stage):
+        """Test that conviction with 0.0 position size returns None."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "SHORT",
+            "conviction": -2.0,  # Maps to 0.0 position size
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade is None, "Zero position size should return None"
+
+    def test_prepare_trade_missing_account_uses_unknown(self, execution_stage):
+        """Test that missing account field defaults to 'Unknown'."""
+        decision = {
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade["account"] == "Unknown"
+
+    def test_prepare_trade_missing_alpaca_id_uses_unknown(self, execution_stage):
+        """Test that missing alpaca_id field defaults to 'Unknown'."""
+        decision = {
+            "account": "Test",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade["alpaca_id"] == "Unknown"
+
+    def test_prepare_trade_missing_model_uses_unknown(self, execution_stage):
+        """Test that missing model field defaults to 'unknown'."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade["model"] == "unknown"
+
+    def test_prepare_trade_missing_conviction_defaults_zero(self, execution_stage):
+        """Test that missing conviction defaults to 0 (returns None)."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "LONG",
+            # conviction missing
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade is None, "Missing conviction should default to 0 (no trade)"
+
+    def test_prepare_trade_missing_direction_returns_none(self, execution_stage):
+        """Test that missing direction defaults to FLAT (returns None)."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "conviction": 1.0,
+            # direction missing
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade is None, "Missing direction should return None"
+
+    def test_prepare_trade_invalid_direction_returns_none(self, execution_stage):
+        """Test that invalid direction (not LONG/SHORT) returns None."""
+        decision = {
+            "account": "Test",
+            "alpaca_id": "test_id",
+            "model": "test/model",
+            "instrument": "SPY",
+            "direction": "SIDEWAYS",  # Invalid
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "test")
+
+        assert trade is None, "Invalid direction should return None"
+
+
+class TestPrepareTradeWithDifferentSources:
+    """Test suite for _prepare_trade with different sources."""
+
+    @pytest.fixture
+    def execution_stage(self):
+        """Create an ExecutionStage instance for testing."""
+        return ExecutionStage()
+
+    def test_prepare_trade_source_council(self, execution_stage):
+        """Test that source is correctly set to 'council'."""
+        decision = {
+            "account": "Council",
+            "alpaca_id": "council_id",
+            "model": "anthropic/claude-opus",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.5,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "council")
+
+        assert trade["source"] == "council"
+
+    def test_prepare_trade_source_pm_model(self, execution_stage):
+        """Test that source is correctly set to PM model key."""
+        decision = {
+            "account": "GPT-5.1",
+            "alpaca_id": "gpt51_id",
+            "model": "openai/gpt-5.1",
+            "instrument": "QQQ",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade = execution_stage._prepare_trade(decision, "openai/gpt-5.1")
+
+        assert trade["source"] == "openai/gpt-5.1"
+
+    def test_prepare_trade_multiple_sources_different_ids(self, execution_stage):
+        """Test that trades from different sources have unique trade_ids."""
+        decision1 = {
+            "account": "Council",
+            "alpaca_id": "council_id",
+            "model": "anthropic/claude-opus",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.5,
+        }
+
+        decision2 = {
+            "account": "GPT-5.1",
+            "alpaca_id": "gpt51_id",
+            "model": "openai/gpt-5.1",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        trade1 = execution_stage._prepare_trade(decision1, "council")
+        trade2 = execution_stage._prepare_trade(decision2, "openai/gpt-5.1")
+
+        assert trade1["trade_id"] != trade2["trade_id"]
+
+
+class TestPrepareTradeIntegrationScenarios:
+    """Test suite for integration scenarios with _prepare_trade."""
+
+    @pytest.fixture
+    def execution_stage(self):
+        """Create an ExecutionStage instance for testing."""
+        return ExecutionStage()
+
+    def test_prepare_all_pm_trades(self, execution_stage, all_pm_pitches):
+        """Test preparing trades for all PM pitches."""
+        # Add account and alpaca_id to all pitches
+        accounts = ["GPT-5.1", "Sonnet-4.5", "Gemini-3", "Grok", "Command-R"]
+        alpaca_ids = ["gpt51_id", "sonnet45_id", "gemini3_id", "grok_id", "command_id"]
+
+        for pitch, account, alpaca_id in zip(all_pm_pitches, accounts, alpaca_ids):
+            pitch["account"] = account
+            pitch["alpaca_id"] = alpaca_id
+
+        trades = []
+        for pitch in all_pm_pitches:
+            trade = execution_stage._prepare_trade(pitch, pitch["model"])
+            if trade:  # Only include non-FLAT trades
+                trades.append(trade)
+
+        # Should have at least some trades (not all FLAT)
+        assert len(trades) > 0
+
+        # All trades should have unique trade_ids
+        trade_ids = [t["trade_id"] for t in trades]
+        assert len(trade_ids) == len(set(trade_ids))
+
+    def test_prepare_trade_conflicting_directions_different_accounts(self, execution_stage):
+        """Test that conflicting directions result in different sides."""
+        long_decision = {
+            "account": "Account1",
+            "alpaca_id": "account1_id",
+            "model": "model1",
+            "instrument": "SPY",
+            "direction": "LONG",
+            "conviction": 1.0,
+        }
+
+        short_decision = {
+            "account": "Account2",
+            "alpaca_id": "account2_id",
+            "model": "model2",
+            "instrument": "SPY",
+            "direction": "SHORT",
+            "conviction": -1.0,
+        }
+
+        long_trade = execution_stage._prepare_trade(long_decision, "model1")
+        short_trade = execution_stage._prepare_trade(short_decision, "model2")
+
+        assert long_trade["side"] == "buy"
+        assert short_trade["side"] == "sell"
+
+    def test_prepare_trade_same_instrument_different_convictions(self, execution_stage):
+        """Test preparing trades for same instrument with different conviction levels."""
+        convictions = [0.5, 1.0, 1.5, 2.0]
+        expected_sizes = [0.75, 0.50, 0.25, 0.10]
+
+        trades = []
+        for conv, expected_size in zip(convictions, expected_sizes):
+            decision = {
+                "account": f"Account_{conv}",
+                "alpaca_id": f"account_{conv}_id",
+                "model": f"model_{conv}",
+                "instrument": "SPY",
+                "direction": "LONG",
+                "conviction": conv,
+            }
+
+            trade = execution_stage._prepare_trade(decision, f"model_{conv}")
+            trades.append(trade)
+
+            assert trade["position_size"] == expected_size
+            assert trade["qty"] == int(100000 * expected_size)
