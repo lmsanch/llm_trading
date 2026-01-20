@@ -12,12 +12,18 @@ Key Modules:
 
 Example:
     from backend.cache.keys import research_report_key
+    from backend.cache.decorator import cached
     from backend.redis_client import get_redis_client
 
-    # Build a cache key
-    key = research_report_key(report_id="abc123")
+    # Use decorator for automatic caching
+    @cached(
+        key_builder=lambda report_id: research_report_key(report_id),
+        ttl=3600
+    )
+    def get_report(report_id: str):
+        return fetch_from_db(report_id)
 
-    # Use with Redis client
+    # Or use Redis client directly
     redis = get_redis_client()
     redis.set(key, json.dumps(data), ttl=3600)
 """
@@ -39,7 +45,15 @@ from .keys import (
     data_package_key,
 )
 
+# Re-export decorator functions
+from .decorator import (
+    cached,
+    cache_key_from_args,
+    invalidate_cache,
+)
+
 __all__ = [
+    # Key builders
     "research_report_key",
     "research_latest_key",
     "research_week_key",
@@ -51,4 +65,8 @@ __all__ = [
     "pitches_latest_key",
     "graphs_latest_key",
     "data_package_key",
+    # Decorator functions
+    "cached",
+    "cache_key_from_args",
+    "invalidate_cache",
 ]
