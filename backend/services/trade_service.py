@@ -127,7 +127,7 @@ class TradeService:
 
             for trade_id in trade_ids:
                 # Find pitch from database
-                pitch = find_pitch_by_id(trade_id)
+                pitch = await find_pitch_by_id(trade_id)
 
                 if not pitch:
                     logger.warning(f"Pitch {trade_id} not found in database")

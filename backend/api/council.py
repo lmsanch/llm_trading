@@ -213,7 +213,7 @@ async def synthesize_council(
                     try:
                         from backend.db.pitch_db import load_pitches
 
-                        pitches = load_pitches(
+                        pitches = await load_pitches(
                             week_id=request.week_id,
                             research_date=request.research_date,
                         )

@@ -35,7 +35,7 @@ class PitchService:
         """Initialize the PitchService."""
         pass
 
-    def get_current_pitches(
+    async def get_current_pitches(
         self,
         week_id: Optional[str] = None,
         research_date: Optional[str] = None
@@ -64,7 +64,7 @@ class PitchService:
             - pm_pitches: Contains PM pitch data
         """
         try:
-            pitches = db_load_pitches(week_id=week_id, research_date=research_date)
+            pitches = await db_load_pitches(week_id=week_id, research_date=research_date)
             logger.info(f"Retrieved {len(pitches)} pitches from database")
             return pitches
         except Exception as e:
@@ -189,7 +189,7 @@ class PitchService:
             # Save pitches to database
             if raw_pitches and week_id:
                 try:
-                    db_save_pitches(
+                    await db_save_pitches(
                         week_id=week_id,
                         pitches_raw=raw_pitches,
                         research_date=research_date
@@ -232,7 +232,7 @@ class PitchService:
 
             raise
 
-    def approve_pitch(
+    async def approve_pitch(
         self,
         pitch_id: int,
         pipeline_state: Any = None
@@ -258,7 +258,7 @@ class PitchService:
         """
         try:
             # Retrieve pitch from database
-            pitch = db_find_pitch_by_id(pitch_id)
+            pitch = await db_find_pitch_by_id(pitch_id)
 
             if not pitch:
                 logger.warning(f"Pitch {pitch_id} not found for approval")
@@ -290,7 +290,7 @@ class PitchService:
                 "message": f"Error approving pitch: {str(e)}"
             }
 
-    def get_pitch_by_id(self, pitch_id: int) -> Optional[Dict[str, Any]]:
+    async def get_pitch_by_id(self, pitch_id: int) -> Optional[Dict[str, Any]]:
         """
         Get a specific pitch by its database ID.
 
@@ -304,7 +304,7 @@ class PitchService:
             - pm_pitches: Contains PM pitch data
         """
         try:
-            pitch = db_find_pitch_by_id(pitch_id)
+            pitch = await db_find_pitch_by_id(pitch_id)
             if pitch:
                 logger.info(f"Retrieved pitch {pitch_id} from database")
             else:
