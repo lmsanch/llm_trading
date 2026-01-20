@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.pipeline.stages.research import get_week_id
 from backend.config import get_cors_origins
-from backend.redis_client import get_redis_client, close_redis_client
+from backend.redis_client import init_redis_pool, get_redis_pool, close_redis_pool, close_redis_client
 from backend.db.pool import init_pool, close_pool, check_pool_health
 
 
@@ -76,10 +76,11 @@ async def startup_event():
         print(f"✗ Database pool initialization failed: {e}")
         print("  Application will continue but database operations may fail")
 
-    # Initialize Redis client
+    # Initialize Redis connection pool
     try:
-        redis_client = get_redis_client()
-        if redis_client.ping():
+        await init_redis_pool()
+        pool = get_redis_pool()
+        if await pool.ping():
             print("✓ Redis connected successfully")
         else:
             print("✗ Redis ping failed - caching will be disabled")
