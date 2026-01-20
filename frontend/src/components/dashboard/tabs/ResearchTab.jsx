@@ -52,6 +52,7 @@ export default function ResearchTab() {
     const stored = sessionStorage.getItem(STORAGE_KEYS.RESEARCH_DATA);
     return stored ? JSON.parse(stored) : null;
   });
+  const [executing, setExecuting] = useState(false);
 
   const [promptData, setPromptData] = useState(() => {
     const stored = sessionStorage.getItem(STORAGE_KEYS.PROMPT_DATA);
@@ -194,6 +195,7 @@ export default function ResearchTab() {
 
   const handleSendResearch = async () => {
     try {
+      setExecuting(true);
       setResearchStateWithPersist('running');
       const models = Object.keys(selectedModels).filter(k => selectedModels[k]);
       const response = await fetch('/api/research/generate', {
@@ -210,6 +212,8 @@ export default function ResearchTab() {
     } catch (error) {
       console.error("Failed to start research:", error);
       setResearchStateWithPersist('error');
+    } finally {
+      setExecuting(false);
     }
   };
 
@@ -418,10 +422,20 @@ export default function ResearchTab() {
                     <div className="pt-6 space-y-3">
                       <Button
                         onClick={handleSendResearch}
+                        disabled={executing}
                         className="w-full h-12 rounded-xl text-base font-bold shadow-xl shadow-primary/20 hover:translate-y-[-2px] active:translate-y-[0px] transition-all"
                       >
-                        <Play className="mr-2 h-5 w-5 fill-current" />
-                        Execute Analysis
+                        {executing ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                            Executing...
+                          </>
+                        ) : (
+                          <>
+                            <Play className="mr-2 h-5 w-5 fill-current" />
+                            Execute Analysis
+                          </>
+                        )}
                       </Button>
                       <Button variant="ghost" onClick={handleCancel} className="w-full h-10 rounded-xl text-xs text-muted-foreground hover:bg-destructive/5 hover:text-destructive transition-colors">
                         Abort and return
@@ -519,7 +533,21 @@ export default function ResearchTab() {
               {pollingStatus?.error || "We encountered an unexpected failure during the LLM research loop. Check your API connectivity and system logs."}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
-              <Button onClick={handleSendResearch} variant="destructive" className="px-10 rounded-xl h-12 font-black shadow-xl shadow-destructive/20 uppercase tracking-widest text-[11px]">Retry Operation</Button>
+              <Button
+                onClick={handleSendResearch}
+                disabled={executing}
+                variant="destructive"
+                className="px-10 rounded-xl h-12 font-black shadow-xl shadow-destructive/20 uppercase tracking-widest text-[11px]"
+              >
+                {executing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Retrying...
+                  </>
+                ) : (
+                  'Retry Operation'
+                )}
+              </Button>
               <Button variant="outline" onClick={handleCancel} className="px-10 rounded-xl h-12 font-bold opacity-60 hover:opacity-100 transition-opacity">Back to Monitor</Button>
             </div>
           </CardContent>
