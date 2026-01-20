@@ -810,6 +810,435 @@ class TestConvictionValidation:
         """
 
 
+class TestBannedKeywordDetection:
+    """Test suite for IndicatorError and banned keyword detection logic."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.stage = PMPitchStage()
+
+    def test_banned_keywords_constant_exists(self):
+        """Test that BANNED_KEYWORDS constant is defined."""
+        from backend.pipeline.stages.pm_pitch import BANNED_KEYWORDS
+        assert BANNED_KEYWORDS is not None
+        assert isinstance(BANNED_KEYWORDS, list)
+        assert len(BANNED_KEYWORDS) > 0
+
+    def test_banned_keywords_includes_common_indicators(self):
+        """Test that BANNED_KEYWORDS includes common technical indicators."""
+        from backend.pipeline.stages.pm_pitch import BANNED_KEYWORDS
+
+        # These should all be banned
+        expected_keywords = ["rsi", "macd", "bollinger", "fibonacci", "ema", "sma"]
+        for keyword in expected_keywords:
+            assert keyword in BANNED_KEYWORDS, f"{keyword} should be in BANNED_KEYWORDS"
+
+    def test_indicator_error_exception_exists(self):
+        """Test that IndicatorError exception is defined."""
+        assert IndicatorError is not None
+        assert issubclass(IndicatorError, Exception)
+
+    def test_indicator_error_stores_keyword(self):
+        """Test that IndicatorError stores the keyword that was found."""
+        error = IndicatorError("RSI")
+        assert error.keyword == "RSI"
+        assert "RSI" in str(error)
+
+    def test_detect_rsi_in_thesis(self):
+        """Test that RSI keyword in thesis bullets is detected."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": [
+                "Market is oversold based on RSI levels",
+                "Strong fundamentals"
+            ],
+            "risk_notes": "Monitor Fed signals"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "rsi"
+
+    def test_detect_macd_in_thesis(self):
+        """Test that MACD keyword in thesis bullets is detected."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": [
+                "MACD crossover suggests bullish momentum"
+            ],
+            "risk_notes": "Monitor trend"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "macd"
+
+    def test_detect_moving_average_in_risk_notes(self):
+        """Test that moving average keyword in risk_notes is detected."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["Strong fundamentals"],
+            "risk_notes": "Watch for moving average crossover"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "moving average"
+
+    def test_detect_ema_case_insensitive(self):
+        """Test that EMA detection is case-insensitive."""
+        test_cases = [
+            "EMA is bullish",
+            "ema is bullish",
+            "Ema is bullish",
+            "Price above EMA"
+        ]
+
+        for text in test_cases:
+            pitch = {
+                "idea_id": "test-123",
+                "thesis_bullets": [text],
+                "risk_notes": "Monitor"
+            }
+
+            with pytest.raises(IndicatorError) as exc_info:
+                self.stage._validate_no_indicators(pitch)
+
+            assert exc_info.value.keyword == "ema", f"Failed for: {text}"
+
+    def test_detect_sma_case_insensitive(self):
+        """Test that SMA detection is case-insensitive."""
+        test_cases = [
+            "SMA trending up",
+            "sma trending up",
+            "Sma trending up",
+            "Above 200 SMA"
+        ]
+
+        for text in test_cases:
+            pitch = {
+                "idea_id": "test-123",
+                "thesis_bullets": [text],
+                "risk_notes": "Monitor"
+            }
+
+            with pytest.raises(IndicatorError) as exc_info:
+                self.stage._validate_no_indicators(pitch)
+
+            assert exc_info.value.keyword == "sma", f"Failed for: {text}"
+
+    def test_detect_bollinger_bands(self):
+        """Test that Bollinger bands keyword is detected."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["Price touching lower Bollinger band"],
+            "risk_notes": "Monitor volatility"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "bollinger"
+
+    def test_detect_fibonacci_retracement(self):
+        """Test that Fibonacci keyword is detected."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["Price at Fibonacci 61.8% level"],
+            "risk_notes": "Monitor support"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "fibonacci"
+
+    def test_detect_stochastic_oscillator(self):
+        """Test that stochastic keyword is detected."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["Stochastic showing oversold conditions"],
+            "risk_notes": "Monitor momentum"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "stochastic"
+
+    def test_detect_ichimoku_cloud(self):
+        """Test that Ichimoku keyword is detected."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["Price above Ichimoku cloud"],
+            "risk_notes": "Monitor trend"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "ichimoku"
+
+    def test_detect_adx_indicator(self):
+        """Test that ADX keyword is detected."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["ADX shows strong trend"],
+            "risk_notes": "Monitor direction"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "adx"
+
+    def test_detect_atr_indicator(self):
+        """Test that ATR keyword is detected."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["ATR indicates high volatility"],
+            "risk_notes": "Monitor range"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "atr"
+
+    def test_detect_keyword_in_nested_structure(self):
+        """Test that keywords are detected in deeply nested structures."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["Strong fundamentals"],
+            "risk_notes": "Monitor signals",
+            "exit_policy": {
+                "notes": "Exit if RSI drops below 30",
+                "time_stop_days": 7
+            }
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "rsi"
+
+    def test_detect_keyword_in_list_of_dicts(self):
+        """Test that keywords are detected in lists of dictionaries."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": [
+                {"type": "rates", "text": "Fed policy supportive"},
+                {"type": "technical", "text": "MACD bullish crossover"}
+            ],
+            "risk_notes": "Monitor"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "macd"
+
+    def test_allow_valid_fundamental_analysis(self):
+        """Test that valid fundamental analysis terms are allowed."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": [
+                "Rates: Fed policy is accommodative",
+                "Growth: Strong GDP and jobs data",
+                "Policy: Fiscal spending supportive",
+                "Credit: Spreads tightening on fundamentals"
+            ],
+            "notes": "Watch Fed signals and economic data"
+        }
+
+        # Should not raise any exception
+        self.stage._validate_no_indicators(pitch)
+
+    def test_allow_valid_macro_terminology(self):
+        """Test that valid macro terminology is allowed."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": [
+                "Yield curve steepening favors financials",
+                "Dollar weakness supports commodities",
+                "Inflation expectations rising moderately",
+                "Credit conditions improving"
+            ],
+            "risk_notes": "Watch for Fed policy shifts"
+        }
+
+        # Should not raise any exception
+        self.stage._validate_no_indicators(pitch)
+
+    def test_allow_price_and_valuation_terms(self):
+        """Test that price and valuation terms are allowed."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": [
+                "Price to earnings ratio attractive",
+                "Valuation discount to peers",
+                "Strong price momentum on fundamentals",
+                "Price action reflects underlying strength"
+            ],
+            "risk_notes": "Monitor valuation metrics"
+        }
+
+        # Should not raise any exception
+        self.stage._validate_no_indicators(pitch)
+
+    def test_allow_momentum_without_indicators(self):
+        """Test that momentum terms without technical indicators are allowed."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": [
+                "Strong momentum in earnings growth",
+                "Positive momentum from policy changes",
+                "Building momentum in sector rotation"
+            ],
+            "risk_notes": "Watch for momentum shifts"
+        }
+
+        # Should not raise any exception
+        self.stage._validate_no_indicators(pitch)
+
+    def test_detect_multiple_banned_keywords(self):
+        """Test detection when multiple banned keywords are present."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": [
+                "RSI oversold and MACD bullish",
+                "Price above moving average"
+            ],
+            "risk_notes": "Monitor"
+        }
+
+        # Should detect at least one
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        # Should be one of the banned keywords
+        assert exc_info.value.keyword in ["rsi", "macd", "moving average"]
+
+    def test_empty_pitch_allowed(self):
+        """Test that pitch with minimal fields is allowed."""
+        pitch = {
+            "idea_id": "test-123"
+        }
+
+        # Should not raise any exception
+        self.stage._validate_no_indicators(pitch)
+
+    def test_none_values_handled_gracefully(self):
+        """Test that None values in pitch don't cause errors."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["Strong fundamentals"],
+            "risk_notes": None,
+            "exit_policy": None
+        }
+
+        # Should not raise any exception
+        self.stage._validate_no_indicators(pitch)
+
+    def test_numeric_values_handled(self):
+        """Test that numeric values in pitch are handled correctly."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["Strong fundamentals"],
+            "conviction": 1.5,
+            "time_stop_days": 7,
+            "stop_loss_pct": 0.015
+        }
+
+        # Should not raise any exception
+        self.stage._validate_no_indicators(pitch)
+
+    def test_detect_moving_average_with_hyphen(self):
+        """Test that 'moving-average' (hyphenated) is detected."""
+        pitch = {
+            "idea_id": "test-123",
+            "thesis_bullets": ["Price crosses moving-average line"],
+            "risk_notes": "Monitor"
+        }
+
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._validate_no_indicators(pitch)
+
+        assert exc_info.value.keyword == "moving-average"
+
+    def test_recursive_scan_strings_method(self):
+        """Test that _recursive_scan_strings method works correctly."""
+        test_obj = {
+            "level1": "text ONE",
+            "level2": {
+                "nested": "text TWO",
+                "list": ["item1", "item2"]
+            }
+        }
+
+        text_collector = []
+        self.stage._recursive_scan_strings(test_obj, text_collector)
+
+        # Should have collected all strings in lowercase
+        assert "text one" in text_collector
+        assert "text two" in text_collector
+        assert "item1" in text_collector
+        assert "item2" in text_collector
+
+    def test_recursive_scan_handles_nested_lists(self):
+        """Test that _recursive_scan_strings handles nested lists."""
+        test_obj = {
+            "bullets": [
+                ["nested", "list"],
+                "simple string"
+            ]
+        }
+
+        text_collector = []
+        self.stage._recursive_scan_strings(test_obj, text_collector)
+
+        assert "nested" in text_collector
+        assert "list" in text_collector
+        assert "simple string" in text_collector
+
+    @patch('backend.pipeline.stages.pm_pitch.REQUESTY_MODELS', MOCK_REQUESTY_MODELS)
+    def test_full_pitch_validation_rejects_indicators(self):
+        """Test that full pitch parsing rejects pitches with banned indicators."""
+        pitch_json = """
+        {
+            "idea_id": "test-123",
+            "week_id": "2025-01-20",
+            "asof_et": "2025-01-20T16:00:00-05:00",
+            "pm_model": "test_model",
+            "selected_instrument": "SPY",
+            "direction": "LONG",
+            "horizon": "1W",
+            "conviction": 1.5,
+            "risk_profile": "BASE",
+            "thesis_bullets": [
+                "RSI shows oversold conditions"
+            ],
+            "entry_policy": {"mode": "limit", "limit_price": null},
+            "exit_policy": {
+                "time_stop_days": 7,
+                "stop_loss_pct": 0.015,
+                "take_profit_pct": 0.025
+            },
+            "risk_notes": "Monitor RSI levels",
+            "timestamp": "2025-01-20T16:00:00Z"
+        }
+        """
+
+        # Should raise IndicatorError due to banned keyword
+        with pytest.raises(IndicatorError) as exc_info:
+            self.stage._parse_pm_pitch(pitch_json, "test_model")
+
+        assert exc_info.value.keyword == "rsi"
+
+
 class TestEntryAndExitValidation:
     """Test suite for entry mode and exit event validation."""
 
