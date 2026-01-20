@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -7,6 +7,21 @@ import { mockPositions, mockAccounts } from '../../../lib/mockData';
 import { cn } from "../../../lib/utils";
 
 export default function MonitorTab() {
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [loadingPositions, setLoadingPositions] = useState(true);
+
+  useEffect(() => {
+    // Simulate loading accounts
+    const timer = setTimeout(() => setLoadingAccounts(false), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    // Simulate loading positions
+    const timer = setTimeout(() => setLoadingPositions(false), 1800);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <div className="space-y-6">
        <div className="flex justify-between items-center">
@@ -21,7 +36,23 @@ export default function MonitorTab() {
 
       {/* Account Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {mockAccounts.map((acc, i) => (
+        {loadingAccounts ? (
+          // Skeleton cards
+          Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-6">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="h-3 w-20 bg-muted animate-pulse rounded"></div>
+                  <div className="h-4 w-4 bg-muted animate-pulse rounded"></div>
+                </div>
+                <div className="h-8 w-32 bg-muted animate-pulse rounded mb-1"></div>
+                <div className="h-4 w-24 bg-muted animate-pulse rounded"></div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          // Real account cards
+          mockAccounts.map((acc, i) => (
             <Card key={i}>
                 <CardContent className="pt-6">
                     <div className="flex justify-between items-start mb-2">
@@ -38,7 +69,8 @@ export default function MonitorTab() {
                     </div>
                 </CardContent>
             </Card>
-        ))}
+          ))
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -56,20 +88,36 @@ export default function MonitorTab() {
                     <div className="text-right">Current</div>
                     <div className="text-right">P/L</div>
                 </div>
-                {mockPositions.map((pos, i) => (
-                    <div key={i} className="grid grid-cols-6 gap-4 p-3 text-sm items-center hover:bg-muted/10 transition-colors border-b last:border-0">
-                        <div className="font-medium text-muted-foreground">{pos.account}</div>
-                        <div className="font-bold">{pos.symbol}</div>
-                        <div className="text-right font-mono">{pos.qty}</div>
-                        <div className="text-right text-muted-foreground">${pos.avg_price.toFixed(2)}</div>
-                        <div className="text-right font-medium">${pos.current_price.toFixed(2)}</div>
-                        <div className={cn("text-right font-medium", pos.pl >= 0 ? "text-green-500" : "text-red-500")}>
-                            {pos.pl >= 0 ? '+' : ''}${pos.pl}
-                        </div>
+                {loadingPositions ? (
+                  // Skeleton rows
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="grid grid-cols-6 gap-4 p-3 text-sm items-center border-b last:border-0">
+                      <div className="h-4 w-16 bg-muted animate-pulse rounded"></div>
+                      <div className="h-4 w-12 bg-muted animate-pulse rounded"></div>
+                      <div className="h-4 w-8 bg-muted animate-pulse rounded ml-auto"></div>
+                      <div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto"></div>
+                      <div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto"></div>
+                      <div className="h-4 w-12 bg-muted animate-pulse rounded ml-auto"></div>
                     </div>
-                ))}
-                 {mockPositions.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">No active positions.</div>
+                  ))
+                ) : (
+                  <>
+                    {mockPositions.map((pos, i) => (
+                      <div key={i} className="grid grid-cols-6 gap-4 p-3 text-sm items-center hover:bg-muted/10 transition-colors border-b last:border-0">
+                          <div className="font-medium text-muted-foreground">{pos.account}</div>
+                          <div className="font-bold">{pos.symbol}</div>
+                          <div className="text-right font-mono">{pos.qty}</div>
+                          <div className="text-right text-muted-foreground">${pos.avg_price.toFixed(2)}</div>
+                          <div className="text-right font-medium">${pos.current_price.toFixed(2)}</div>
+                          <div className={cn("text-right font-medium", pos.pl >= 0 ? "text-green-500" : "text-red-500")}>
+                              {pos.pl >= 0 ? '+' : ''}${pos.pl}
+                          </div>
+                      </div>
+                    ))}
+                    {mockPositions.length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground">No active positions.</div>
+                    )}
+                  </>
                 )}
             </div>
         </div>
