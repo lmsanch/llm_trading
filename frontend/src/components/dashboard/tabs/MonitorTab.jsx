@@ -8,10 +8,17 @@ import { cn } from "../../../lib/utils";
 
 export default function MonitorTab() {
   const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [loadingPositions, setLoadingPositions] = useState(true);
 
   useEffect(() => {
     // Simulate loading accounts
     const timer = setTimeout(() => setLoadingAccounts(false), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    // Simulate loading positions
+    const timer = setTimeout(() => setLoadingPositions(false), 1800);
     return () => clearTimeout(timer);
   }, []);
 
@@ -81,20 +88,36 @@ export default function MonitorTab() {
                     <div className="text-right">Current</div>
                     <div className="text-right">P/L</div>
                 </div>
-                {mockPositions.map((pos, i) => (
-                    <div key={i} className="grid grid-cols-6 gap-4 p-3 text-sm items-center hover:bg-muted/10 transition-colors border-b last:border-0">
-                        <div className="font-medium text-muted-foreground">{pos.account}</div>
-                        <div className="font-bold">{pos.symbol}</div>
-                        <div className="text-right font-mono">{pos.qty}</div>
-                        <div className="text-right text-muted-foreground">${pos.avg_price.toFixed(2)}</div>
-                        <div className="text-right font-medium">${pos.current_price.toFixed(2)}</div>
-                        <div className={cn("text-right font-medium", pos.pl >= 0 ? "text-green-500" : "text-red-500")}>
-                            {pos.pl >= 0 ? '+' : ''}${pos.pl}
-                        </div>
+                {loadingPositions ? (
+                  // Skeleton rows
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="grid grid-cols-6 gap-4 p-3 text-sm items-center border-b last:border-0">
+                      <div className="h-4 w-16 bg-muted animate-pulse rounded"></div>
+                      <div className="h-4 w-12 bg-muted animate-pulse rounded"></div>
+                      <div className="h-4 w-8 bg-muted animate-pulse rounded ml-auto"></div>
+                      <div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto"></div>
+                      <div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto"></div>
+                      <div className="h-4 w-12 bg-muted animate-pulse rounded ml-auto"></div>
                     </div>
-                ))}
-                 {mockPositions.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">No active positions.</div>
+                  ))
+                ) : (
+                  <>
+                    {mockPositions.map((pos, i) => (
+                      <div key={i} className="grid grid-cols-6 gap-4 p-3 text-sm items-center hover:bg-muted/10 transition-colors border-b last:border-0">
+                          <div className="font-medium text-muted-foreground">{pos.account}</div>
+                          <div className="font-bold">{pos.symbol}</div>
+                          <div className="text-right font-mono">{pos.qty}</div>
+                          <div className="text-right text-muted-foreground">${pos.avg_price.toFixed(2)}</div>
+                          <div className="text-right font-medium">${pos.current_price.toFixed(2)}</div>
+                          <div className={cn("text-right font-medium", pos.pl >= 0 ? "text-green-500" : "text-red-500")}>
+                              {pos.pl >= 0 ? '+' : ''}${pos.pl}
+                          </div>
+                      </div>
+                    ))}
+                    {mockPositions.length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground">No active positions.</div>
+                    )}
+                  </>
                 )}
             </div>
         </div>
