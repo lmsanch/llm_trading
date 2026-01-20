@@ -62,3 +62,22 @@ def get_cors_origins():
         f"http://localhost:{FRONTEND_PORT}",
         f"http://{TAILSCALE_IP}:{FRONTEND_PORT}",
     ]
+
+# ============================================================================
+# PostgreSQL / Database Configuration
+# ============================================================================
+
+# Database connection parameters
+DATABASE_URL = os.getenv("DATABASE_URL")  # Full connection string (optional)
+DATABASE_NAME = os.getenv("DATABASE_NAME", "llm_trading")
+DATABASE_USER = os.getenv("DATABASE_USER", "luis")
+DATABASE_HOST = os.getenv("DATABASE_HOST", "localhost")
+DATABASE_PORT = get_port("DATABASE_PORT", 5432)
+DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD")  # Optional
+
+# Connection pool configuration
+DB_MIN_POOL_SIZE = int(os.getenv("DB_MIN_POOL_SIZE", "10"))
+DB_MAX_POOL_SIZE = int(os.getenv("DB_MAX_POOL_SIZE", "50"))
+DB_COMMAND_TIMEOUT = float(os.getenv("DB_COMMAND_TIMEOUT", "60.0"))
+DB_MAX_QUERIES = int(os.getenv("DB_MAX_QUERIES", "50000"))
+DB_MAX_INACTIVE_CONNECTION_LIFETIME = float(os.getenv("DB_MAX_INACTIVE_CONNECTION_LIFETIME", "300.0"))
