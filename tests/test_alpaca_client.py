@@ -10,7 +10,7 @@ This module tests the AlpacaAccountClient class from backend.multi_alpaca_client
 
 import pytest
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from backend.multi_alpaca_client import (
     AlpacaAccountClient,
     ALPACA_ACCOUNTS,
@@ -398,3 +398,549 @@ class TestAlpacaAccountClientEdgeCases:
         for client in clients:
             assert client.account_name == 'CHATGPT'
             assert client.account_id == 'PA3IUYCYRWGK'
+
+
+# ============================================================================
+# API METHOD TESTS WITH MOCKED HTTP RESPONSES
+# ============================================================================
+
+
+class TestAlpacaAccountClientGetAccount:
+    """Test suite for get_account method with mocked HTTP responses."""
+
+    @pytest.mark.asyncio
+    async def test_get_account_success(self):
+        """Test get_account returns correct account data on success."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response_data = {
+            "id": "PA3IUYCYRWGK",
+            "account_number": "PA3IUYCYRWGK",
+            "status": "ACTIVE",
+            "currency": "USD",
+            "cash": "100000.00",
+            "portfolio_value": "100000.00",
+            "buying_power": "200000.00",
+            "equity": "100000.00",
+            "last_equity": "100000.00",
+            "long_market_value": "0.00",
+            "short_market_value": "0.00",
+            "pattern_day_trader": False,
+        }
+
+        # Mock httpx.AsyncClient
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_response_data
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.get_account()
+
+            # Verify result matches mock data
+            assert result == mock_response_data
+            assert result['id'] == 'PA3IUYCYRWGK'
+            assert result['cash'] == '100000.00'
+            assert result['status'] == 'ACTIVE'
+
+            # Verify correct endpoint was called
+            mock_client_instance.get.assert_called_once_with('/v2/account')
+
+    @pytest.mark.asyncio
+    async def test_get_account_uses_correct_headers(self):
+        """Test that get_account uses correct authentication headers."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"id": "PA3IUYCYRWGK", "status": "ACTIVE"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            await client.get_account()
+
+            # Verify AsyncClient was initialized with correct headers
+            call_kwargs = mock_client_class.call_args[1]
+            assert 'headers' in call_kwargs
+            headers = call_kwargs['headers']
+            assert 'APCA-API-KEY-ID' in headers
+            assert 'APCA-API-SECRET-KEY' in headers
+            assert 'Content-Type' in headers
+            assert headers['Content-Type'] == 'application/json'
+
+    @pytest.mark.asyncio
+    async def test_get_account_http_error(self):
+        """Test that get_account raises exception on HTTP error."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        import httpx
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "401 Unauthorized",
+            request=MagicMock(),
+            response=MagicMock()
+        )
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            with pytest.raises(httpx.HTTPStatusError):
+                await client.get_account()
+
+    @pytest.mark.asyncio
+    async def test_get_account_uses_correct_base_url(self):
+        """Test that get_account uses paper trading URL."""
+        client = AlpacaAccountClient('CHATGPT', paper=True)
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"id": "PA3IUYCYRWGK"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            await client.get_account()
+
+            # Verify correct base_url was used
+            call_kwargs = mock_client_class.call_args[1]
+            assert call_kwargs['base_url'] == PAPER_URL
+
+
+class TestAlpacaAccountClientGetPositions:
+    """Test suite for get_positions method with mocked HTTP responses."""
+
+    @pytest.mark.asyncio
+    async def test_get_positions_all(self):
+        """Test get_positions returns all positions when no symbol provided."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_positions = [
+            {
+                "symbol": "SPY",
+                "qty": "10",
+                "avg_entry_price": "445.50",
+                "market_value": "4502.50",
+                "unrealized_pl": "47.50",
+            },
+            {
+                "symbol": "QQQ",
+                "qty": "5",
+                "avg_entry_price": "378.25",
+                "market_value": "1902.50",
+                "unrealized_pl": "11.25",
+            }
+        ]
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_positions
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.get_positions()
+
+            # Verify result matches mock data
+            assert result == mock_positions
+            assert len(result) == 2
+            assert result[0]['symbol'] == 'SPY'
+            assert result[1]['symbol'] == 'QQQ'
+
+            # Verify correct endpoint was called (no symbol)
+            mock_client_instance.get.assert_called_once_with('/v2/positions')
+
+    @pytest.mark.asyncio
+    async def test_get_positions_filtered_by_symbol(self):
+        """Test get_positions filters by symbol when provided."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_position = {
+            "symbol": "SPY",
+            "qty": "10",
+            "avg_entry_price": "445.50",
+            "market_value": "4502.50",
+            "unrealized_pl": "47.50",
+        }
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_position
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.get_positions(symbol='SPY')
+
+            # Verify result matches mock data
+            assert result == mock_position
+            assert result['symbol'] == 'SPY'
+
+            # Verify correct endpoint was called with symbol
+            mock_client_instance.get.assert_called_once_with('/v2/positions/SPY')
+
+    @pytest.mark.asyncio
+    async def test_get_positions_empty(self):
+        """Test get_positions returns empty list when no positions exist."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = []
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.get_positions()
+
+            assert result == []
+            assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_positions_http_error(self):
+        """Test that get_positions raises exception on HTTP error."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        import httpx
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "404 Not Found",
+            request=MagicMock(),
+            response=MagicMock()
+        )
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            with pytest.raises(httpx.HTTPStatusError):
+                await client.get_positions()
+
+    @pytest.mark.asyncio
+    async def test_get_positions_uses_correct_headers(self):
+        """Test that get_positions uses correct authentication headers."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = []
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            await client.get_positions()
+
+            # Verify AsyncClient was initialized with correct headers
+            call_kwargs = mock_client_class.call_args[1]
+            assert 'headers' in call_kwargs
+            headers = call_kwargs['headers']
+            assert 'APCA-API-KEY-ID' in headers
+            assert 'APCA-API-SECRET-KEY' in headers
+
+    @pytest.mark.asyncio
+    async def test_get_positions_multiple_symbols(self):
+        """Test get_positions with different symbol calls."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        symbols_to_test = ['SPY', 'QQQ', 'TLT', 'GLD']
+
+        for symbol in symbols_to_test:
+            mock_response = MagicMock()
+            mock_response.json.return_value = {"symbol": symbol, "qty": "10"}
+            mock_response.raise_for_status = MagicMock()
+
+            with patch('httpx.AsyncClient') as mock_client_class:
+                mock_client_instance = MagicMock()
+                mock_client_instance.get = AsyncMock(return_value=mock_response)
+                mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+                result = await client.get_positions(symbol=symbol)
+
+                # Verify correct endpoint
+                expected_endpoint = f'/v2/positions/{symbol}'
+                mock_client_instance.get.assert_called_once_with(expected_endpoint)
+                assert result['symbol'] == symbol
+
+
+class TestAlpacaAccountClientGetOrders:
+    """Test suite for get_orders method with mocked HTTP responses."""
+
+    @pytest.mark.asyncio
+    async def test_get_orders_no_filters(self):
+        """Test get_orders returns all orders when no filters provided."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_orders = [
+            {
+                "id": "order-1",
+                "symbol": "SPY",
+                "qty": "10",
+                "side": "buy",
+                "type": "market",
+                "status": "filled",
+            },
+            {
+                "id": "order-2",
+                "symbol": "QQQ",
+                "qty": "5",
+                "side": "sell",
+                "type": "limit",
+                "status": "open",
+            }
+        ]
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_orders
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.get_orders()
+
+            # Verify result matches mock data
+            assert result == mock_orders
+            assert len(result) == 2
+            assert result[0]['symbol'] == 'SPY'
+            assert result[1]['symbol'] == 'QQQ'
+
+            # Verify correct endpoint was called with no params
+            mock_client_instance.get.assert_called_once_with('/v2/orders', params={})
+
+    @pytest.mark.asyncio
+    async def test_get_orders_filter_by_status(self):
+        """Test get_orders filters by status correctly."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_orders = [
+            {
+                "id": "order-1",
+                "symbol": "SPY",
+                "status": "open",
+            }
+        ]
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_orders
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.get_orders(status='open')
+
+            # Verify result
+            assert result == mock_orders
+            assert all(order['status'] == 'open' for order in result)
+
+            # Verify params include status
+            mock_client_instance.get.assert_called_once_with(
+                '/v2/orders',
+                params={'status': 'open'}
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_orders_filter_by_limit(self):
+        """Test get_orders applies limit correctly."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_orders = [
+            {"id": "order-1", "symbol": "SPY"},
+            {"id": "order-2", "symbol": "QQQ"},
+            {"id": "order-3", "symbol": "TLT"},
+        ]
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_orders
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.get_orders(limit=3)
+
+            # Verify params include limit
+            mock_client_instance.get.assert_called_once_with(
+                '/v2/orders',
+                params={'limit': 3}
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_orders_filter_by_symbol(self):
+        """Test get_orders filters by symbol correctly."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_orders = [
+            {
+                "id": "order-1",
+                "symbol": "SPY",
+                "qty": "10",
+            }
+        ]
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_orders
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.get_orders(symbol='SPY')
+
+            # Verify result
+            assert result == mock_orders
+            assert all(order['symbol'] == 'SPY' for order in result)
+
+            # Verify params include symbol
+            mock_client_instance.get.assert_called_once_with(
+                '/v2/orders',
+                params={'symbol': 'SPY'}
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_orders_multiple_filters(self):
+        """Test get_orders applies multiple filters correctly."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_orders = [
+            {
+                "id": "order-1",
+                "symbol": "SPY",
+                "status": "filled",
+            }
+        ]
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_orders
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.get_orders(status='filled', limit=10, symbol='SPY')
+
+            # Verify all params are included
+            mock_client_instance.get.assert_called_once_with(
+                '/v2/orders',
+                params={'status': 'filled', 'limit': 10, 'symbol': 'SPY'}
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_orders_empty(self):
+        """Test get_orders returns empty list when no orders exist."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = []
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            result = await client.get_orders()
+
+            assert result == []
+            assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_orders_http_error(self):
+        """Test that get_orders raises exception on HTTP error."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        import httpx
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "500 Internal Server Error",
+            request=MagicMock(),
+            response=MagicMock()
+        )
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            with pytest.raises(httpx.HTTPStatusError):
+                await client.get_orders()
+
+    @pytest.mark.asyncio
+    async def test_get_orders_uses_correct_headers(self):
+        """Test that get_orders uses correct authentication headers."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = []
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client_instance = MagicMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+            await client.get_orders()
+
+            # Verify AsyncClient was initialized with correct headers
+            call_kwargs = mock_client_class.call_args[1]
+            assert 'headers' in call_kwargs
+            headers = call_kwargs['headers']
+            assert 'APCA-API-KEY-ID' in headers
+            assert 'APCA-API-SECRET-KEY' in headers
+            assert 'Content-Type' in headers
+
+    @pytest.mark.asyncio
+    async def test_get_orders_various_statuses(self):
+        """Test get_orders with various status values."""
+        client = AlpacaAccountClient('CHATGPT')
+
+        statuses = ['open', 'closed', 'filled', 'canceled', 'pending_new']
+
+        for status in statuses:
+            mock_response = MagicMock()
+            mock_response.json.return_value = [{"id": "order-1", "status": status}]
+            mock_response.raise_for_status = MagicMock()
+
+            with patch('httpx.AsyncClient') as mock_client_class:
+                mock_client_instance = MagicMock()
+                mock_client_instance.get = AsyncMock(return_value=mock_response)
+                mock_client_class.return_value.__aenter__.return_value = mock_client_instance
+
+                result = await client.get_orders(status=status)
+
+                # Verify params include correct status
+                mock_client_instance.get.assert_called_once_with(
+                    '/v2/orders',
+                    params={'status': status}
+                )
