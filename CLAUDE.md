@@ -146,6 +146,310 @@ app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins())
 
 ---
 
+## Database Architecture
+
+### Async PostgreSQL Connection Pool
+
+The application uses **asyncpg** with a connection pool for all database operations. This provides:
+- **2-3x faster** queries than psycopg2
+- **Non-blocking I/O** (doesn't block the event loop)
+- **Connection reuse** (50-90% latency reduction)
+- **Automatic lifecycle management**
+
+**Implementation:** `backend/db/pool.py`
+
+### Pool Configuration
+
+Environment variables (in `.env`):
+
+```bash
+# Connection (use DATABASE_URL OR individual components)
+DATABASE_URL=postgresql://user:pass@localhost:5432/llm_trading
+# OR
+DATABASE_NAME=llm_trading
+DATABASE_USER=luis
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_PASSWORD=secret
+
+# Pool settings (defaults shown)
+DB_MIN_POOL_SIZE=10           # Minimum connections
+DB_MAX_POOL_SIZE=50           # Maximum connections
+DB_COMMAND_TIMEOUT=60.0       # Query timeout (seconds)
+DB_MAX_QUERIES=50000          # Queries before connection recycling
+DB_MAX_INACTIVE_CONNECTION_LIFETIME=300.0  # Max idle time (seconds)
+```
+
+### Lifecycle Management
+
+The pool is initialized on FastAPI startup and closed on shutdown:
+
+```python
+# backend/main.py
+from backend.db.pool import init_pool, close_pool
+
+@app.on_event("startup")
+async def startup_event():
+    await init_pool()  # Initialize connection pool
+    logger.info("✓ Database pool initialized")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await close_pool()  # Gracefully close pool
+    logger.info("✓ Database pool closed")
+```
+
+### Writing Database Queries
+
+#### Using Helper Functions (Recommended)
+
+The `backend/db_helpers.py` module provides high-level async utilities:
+
+```python
+from backend.db_helpers import fetch_one, fetch_all, fetch_val, execute, transaction
+
+# Fetch single row
+async def get_user(user_id: int):
+    user = await fetch_one("SELECT * FROM users WHERE id = $1", user_id)
+    return user  # dict with column names as keys, or None
+
+# Fetch all rows
+async def get_active_users():
+    users = await fetch_all("SELECT * FROM users WHERE active = $1", True)
+    return users  # list of dicts
+
+# Fetch single value
+async def count_users():
+    count = await fetch_val("SELECT COUNT(*) FROM users")
+    return count  # single value
+
+# Execute INSERT/UPDATE/DELETE
+async def create_user(name: str, email: str):
+    await execute(
+        "INSERT INTO users (name, email) VALUES ($1, $2)",
+        name, email
+    )
+
+# Execute with RETURNING clause
+async def create_user_with_id(name: str, email: str):
+    result = await execute_with_returning(
+        "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id, created_at",
+        name, email
+    )
+    return result["id"]  # dict with returned columns
+
+# Transactions
+async def transfer_money(from_id: int, to_id: int, amount: float):
+    async with transaction() as conn:
+        await conn.execute(
+            "UPDATE accounts SET balance = balance - $1 WHERE id = $2",
+            amount, from_id
+        )
+        await conn.execute(
+            "UPDATE accounts SET balance = balance + $1 WHERE id = $2",
+            amount, to_id
+        )
+        # Automatically commits on success, rolls back on exception
+```
+
+#### Using the Pool Directly (Advanced)
+
+For fine-grained control, acquire connections directly from the pool:
+
+```python
+from backend.db.pool import get_pool
+
+async def custom_query():
+    pool = get_pool()
+
+    async with pool.acquire() as conn:
+        # Use connection for multiple operations
+        user = await conn.fetchrow("SELECT * FROM users WHERE id = $1", 42)
+        logs = await conn.fetch("SELECT * FROM logs WHERE user_id = $1", 42)
+
+        # Connection is automatically returned to pool
+        return dict(user), [dict(log) for log in logs]
+```
+
+### Key Differences from psycopg2
+
+| Aspect | psycopg2 (Old) | asyncpg (New) |
+|--------|----------------|---------------|
+| **I/O Model** | Synchronous (blocks) | Asynchronous (non-blocking) |
+| **Function Type** | Regular functions | `async def` functions |
+| **Calling** | `result = func()` | `result = await func()` |
+| **Parameters** | `%s, %s` placeholders | `$1, $2` placeholders |
+| **Connection** | `psycopg2.connect()` | `pool.acquire()` context manager |
+| **Row Access** | `row[0], row[1]` (index) | `row["column"]` (dict) |
+| **JSONB** | `Json(data)` wrapper | Pass dict directly |
+| **Cursor** | `cursor.execute()` | `conn.execute()` or helpers |
+
+### Migration Example
+
+**Before (psycopg2):**
+```python
+import psycopg2
+from psycopg2.extras import RealDictCursor, Json
+
+def get_user(user_id):
+    conn = psycopg2.connect(...)
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+def save_data(data):
+    conn = psycopg2.connect(...)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO logs (data) VALUES (%s)",
+            (Json(data),)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+```
+
+**After (asyncpg):**
+```python
+from backend.db_helpers import fetch_one, execute
+
+async def get_user(user_id):
+    return await fetch_one("SELECT * FROM users WHERE id = $1", user_id)
+
+async def save_data(data):
+    await execute("INSERT INTO logs (data) VALUES ($1)", data)
+```
+
+### Best Practices
+
+1. **Always use `async def`** for functions that access the database
+2. **Always `await`** database operations
+3. **Use helper functions** (`fetch_one`, `fetch_all`, etc.) instead of raw pool access
+4. **Use `$1, $2, $3`** parameter placeholders, not `%s`
+5. **Access rows with dict keys**, not indices: `row["name"]` not `row[0]`
+6. **Pass dicts directly** to JSONB columns (no `Json()` wrapper)
+7. **Use `transaction()` context manager** for multi-statement transactions
+8. **Don't create connections manually** - always use the global pool
+
+### Health Monitoring
+
+The `/api/health` endpoint checks pool status:
+
+```bash
+curl http://localhost:8200/api/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "redis": "connected",
+  "database": {
+    "status": "healthy",
+    "pool_size": 15,
+    "free_connections": 12,
+    "min_size": 10,
+    "max_size": 50
+  }
+}
+```
+
+### Testing
+
+#### Unit Tests
+
+Tests for connection pool functionality:
+```bash
+pytest tests/test_db_pool.py -v
+```
+
+#### Integration Tests
+
+Tests for async database operations (requires PostgreSQL):
+```bash
+# Set DATABASE_URL in .env first
+pytest tests/test_async_db.py -v
+```
+
+#### Load Tests
+
+Tests for connection pool performance under stress:
+```bash
+pytest tests/test_load_pool.py -v
+```
+
+**Expected Results:**
+- Connection reuse rate: >50%
+- Simple queries: <100ms avg latency
+- Write queries: <200ms avg latency
+- Complex queries: <500ms avg latency
+- Pool exhaustion: Zero failures (graceful queuing)
+
+### Common Gotchas
+
+1. **Forgetting `await`:** `fetch_one()` returns a coroutine, not the result
+   ```python
+   # ❌ Wrong
+   user = fetch_one("SELECT * FROM users WHERE id = $1", 42)
+
+   # ✓ Correct
+   user = await fetch_one("SELECT * FROM users WHERE id = $1", 42)
+   ```
+
+2. **Wrong parameter placeholders:** Use `$1`, not `%s`
+   ```python
+   # ❌ Wrong
+   await fetch_one("SELECT * FROM users WHERE id = %s", 42)
+
+   # ✓ Correct
+   await fetch_one("SELECT * FROM users WHERE id = $1", 42)
+   ```
+
+3. **Index-based row access:** Use dict keys, not indices
+   ```python
+   # ❌ Wrong
+   name = row[0]
+
+   # ✓ Correct
+   name = row["name"]
+   ```
+
+4. **Creating connections manually:** Never call `asyncpg.connect()` directly
+   ```python
+   # ❌ Wrong
+   conn = await asyncpg.connect(...)
+
+   # ✓ Correct
+   pool = get_pool()
+   async with pool.acquire() as conn:
+       ...
+   ```
+
+5. **Using `Json()` wrapper:** Pass dicts directly to JSONB columns
+   ```python
+   # ❌ Wrong (psycopg2 pattern)
+   await execute("INSERT INTO logs (data) VALUES ($1)", Json(data))
+
+   # ✓ Correct (asyncpg automatically serializes dicts)
+   await execute("INSERT INTO logs (data) VALUES ($1)", data)
+   ```
+
+### Migration Scripts Exception
+
+**One-off scripts can still use psycopg2** (connection pooling not needed):
+- `backend/migrate_db.py`
+- `backend/migrate_pm_pitches.py`
+- `backend/storage/migrate_sqlite_to_pg.py`
+- `scripts/backfill_graphs.py`
+
+These scripts are documented with a note explaining why psycopg2 is acceptable.
+
+---
+
 ## Pipeline Context Keys
 
 Type-safe keys for context data:
