@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.pipeline.stages.research import get_week_id
 from backend.config import get_cors_origins
+from backend.redis_client import get_redis_client, close_redis_client
 
 
 class PipelineState:
@@ -66,6 +67,25 @@ async def startup_event():
     for route in app.routes:
         print(f" - {route.path} [{getattr(route, 'methods', [])}]")
 
+    # Initialize Redis client
+    try:
+        redis_client = get_redis_client()
+        if redis_client.ping():
+            print("✓ Redis connected successfully")
+        else:
+            print("✗ Redis ping failed - caching will be disabled")
+    except Exception as e:
+        print(f"✗ Redis initialization failed: {e}")
+        print("  Application will continue without caching")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on application shutdown."""
+    print("Shutting down...")
+    close_redis_client()
+    print("✓ Redis connection closed")
+
 
 @app.get("/")
 async def root():
@@ -79,6 +99,29 @@ async def root():
         "council_status": pipeline_state.council_status,
         "execution_status": pipeline_state.execution_status,
     }
+
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint that verifies Redis connectivity."""
+    status = {
+        "status": "ok",
+        "service": "LLM Council API",
+        "redis": "unknown"
+    }
+
+    try:
+        redis_client = get_redis_client()
+        if redis_client.ping():
+            status["redis"] = "connected"
+        else:
+            status["redis"] = "disconnected"
+            status["status"] = "degraded"
+    except Exception as e:
+        status["redis"] = f"error: {str(e)}"
+        status["status"] = "degraded"
+
+    return status
 
 
 if __name__ == "__main__":
