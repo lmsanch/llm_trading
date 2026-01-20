@@ -30,3 +30,9 @@ frontend/.vite/
 .worktrees/
 .security-key
 logs/security/
+
+# IDE and editor files
+.cursor/
+
+# Automaker directory
+.automaker/
