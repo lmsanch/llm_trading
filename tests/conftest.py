@@ -146,3 +146,207 @@ def temp_storage_dir(tmp_path) -> Path:
     storage_dir = tmp_path / "conversations"
     storage_dir.mkdir(exist_ok=True)
     return storage_dir
+
+
+# ==================== Async Mock Fixtures ====================
+
+@pytest.fixture
+def mock_query_model():
+    """Provide a mock query_model function for testing.
+
+    Returns:
+        Mock function that can be configured per test
+
+    Example:
+        mock_query_model.side_effect = async_return({"content": "Test response"})
+    """
+    from unittest.mock import AsyncMock
+    return AsyncMock()
+
+
+@pytest.fixture
+def mock_query_models_parallel():
+    """Provide a mock query_models_parallel function for testing.
+
+    Returns:
+        Mock function that can be configured per test
+
+    Example:
+        mock_query_models_parallel.return_value = {
+            "model1": {"content": "Response 1"},
+            "model2": {"content": "Response 2"},
+        }
+    """
+    from unittest.mock import AsyncMock
+    return AsyncMock()
+
+
+@pytest.fixture
+def mock_alpaca_client():
+    """Provide a mock Alpaca client for testing.
+
+    Returns:
+        Mock AlpacaAccountClient instance
+
+    Example:
+        mock_alpaca_client.get_account.return_value = {"cash": "100000.00"}
+    """
+    from tests.fixtures.test_helpers import MockAlpacaClient
+    return MockAlpacaClient()
+
+
+# ==================== PM Pitch Fixtures ====================
+
+@pytest.fixture
+def valid_long_pitch():
+    """Provide a valid LONG pitch for testing.
+
+    Returns:
+        Valid PM pitch dictionary
+    """
+    from tests.fixtures.sample_pitches import get_valid_long_pitch
+    return get_valid_long_pitch()
+
+
+@pytest.fixture
+def valid_short_pitch():
+    """Provide a valid SHORT pitch for testing.
+
+    Returns:
+        Valid PM pitch dictionary
+    """
+    from tests.fixtures.sample_pitches import get_valid_short_pitch
+    return get_valid_short_pitch()
+
+
+@pytest.fixture
+def valid_flat_pitch():
+    """Provide a valid FLAT pitch for testing.
+
+    Returns:
+        Valid FLAT pitch dictionary
+    """
+    from tests.fixtures.sample_pitches import get_valid_flat_pitch
+    return get_valid_flat_pitch()
+
+
+@pytest.fixture
+def all_pm_pitches():
+    """Provide pitches from all 5 PM models for testing.
+
+    Returns:
+        List of 5 PM pitches
+    """
+    from tests.fixtures.sample_pitches import get_all_pm_pitches
+    return get_all_pm_pitches()
+
+
+@pytest.fixture
+def conflicting_pitches():
+    """Provide conflicting pitches for chairman decision testing.
+
+    Returns:
+        List of conflicting pitches
+    """
+    from tests.fixtures.sample_pitches import get_conflicting_pitches
+    return get_conflicting_pitches()
+
+
+# ==================== Council Response Fixtures ====================
+
+@pytest.fixture
+def mock_stage1_responses():
+    """Provide mock Stage 1 council responses.
+
+    Returns:
+        List of mock Stage 1 responses
+    """
+    from tests.fixtures.mock_council_responses import get_mock_stage1_responses
+    return get_mock_stage1_responses()
+
+
+@pytest.fixture
+def mock_stage2_rankings():
+    """Provide mock Stage 2 ranking responses.
+
+    Returns:
+        List of mock ranking responses
+    """
+    from tests.fixtures.mock_council_responses import get_mock_stage2_responses
+    return get_mock_stage2_responses()
+
+
+@pytest.fixture
+def mock_chairman_response():
+    """Provide mock chairman synthesis response.
+
+    Returns:
+        Mock chairman response text
+    """
+    from tests.fixtures.mock_council_responses import get_mock_chairman_response
+    return get_mock_chairman_response()
+
+
+@pytest.fixture
+def label_to_model_mapping():
+    """Provide label_to_model mapping for testing.
+
+    Returns:
+        Dict mapping response labels to model names
+    """
+    from tests.fixtures.mock_council_responses import get_label_to_model_mapping
+    return get_label_to_model_mapping()
+
+
+# ==================== Market Data Fixtures ====================
+
+@pytest.fixture
+def market_snapshot():
+    """Provide a mock market data snapshot.
+
+    Returns:
+        MockMarketSnapshot instance
+    """
+    from tests.fixtures.test_helpers import MockMarketSnapshot
+    return MockMarketSnapshot()
+
+
+@pytest.fixture
+def sample_prices() -> Dict[str, float]:
+    """Provide sample market prices for testing.
+
+    Returns:
+        Dict of instrument -> price
+    """
+    return {
+        "SPY": 450.25,
+        "QQQ": 380.50,
+        "IWM": 195.75,
+        "TLT": 95.30,
+        "GLD": 180.40,
+        "UUP": 28.15,
+    }
+
+
+# ==================== Test Helper Fixtures ====================
+
+@pytest.fixture
+def async_return():
+    """Provide async_return helper for creating async mock returns.
+
+    Returns:
+        async_return function from test_helpers
+    """
+    from tests.fixtures.test_helpers import async_return
+    return async_return
+
+
+@pytest.fixture
+def async_raise():
+    """Provide async_raise helper for creating async mock exceptions.
+
+    Returns:
+        async_raise function from test_helpers
+    """
+    from tests.fixtures.test_helpers import async_raise
+    return async_raise
