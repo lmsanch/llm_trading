@@ -1,4 +1,15 @@
-"""Database connection utilities for PostgreSQL."""
+"""Database connection utilities for PostgreSQL.
+
+⚠️ DEPRECATED: This module contains legacy psycopg2-based database utilities.
+These have been replaced by the async connection pool in backend/db/pool.py
+and helper functions in backend/db_helpers.py.
+
+For new code, use:
+- backend/db_helpers.py: fetch_one, fetch_all, fetch_val, execute, transaction
+- backend/db/pool.py: get_pool() for direct pool access
+
+This file is kept for backward compatibility only and may be removed in a future version.
+"""
 
 import os
 import psycopg2

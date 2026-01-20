@@ -3,6 +3,13 @@
 This module provides dependency functions for FastAPI route handlers.
 These dependencies handle resource management and provide access to
 global state and database connections.
+
+⚠️ DEPRECATED: The get_db_connection() function in this module uses legacy psycopg2.
+It has been replaced by the async connection pool. For database access in FastAPI
+endpoints, use the async helper functions from backend/db_helpers.py directly:
+- fetch_one, fetch_all, fetch_val, execute, transaction
+
+This file is kept for backward compatibility only and may be removed in a future version.
 """
 
 import logging
