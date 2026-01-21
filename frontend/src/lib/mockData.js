@@ -237,3 +237,61 @@ export const mockAccounts = [
   { name: "CHATGPT", equity: 100284, cash: 80984, pl: 284 },
   { name: "GEMINI", equity: 99961, cash: 70089, pl: 39 },
 ];
+
+export const mockPerformanceHistory = {
+  account: "COUNCIL",
+  history: [
+    { date: "2025-01-01", equity: 100000, pl: 0 },
+    { date: "2025-01-02", equity: 100150, pl: 150 },
+    { date: "2025-01-03", equity: 100280, pl: 280 },
+    { date: "2025-01-04", equity: 100220, pl: 220 },
+    { date: "2025-01-05", equity: 100355, pl: 355 },
+  ]
+};
+
+export const mockPerformanceComparison = {
+  council: {
+    account: "COUNCIL",
+    total_pl: 355,
+    pl_pct: 0.355,
+    equity: 100355,
+    max_drawdown: -0.06,
+    sharpe_ratio: 1.2
+  },
+  individuals: [
+    {
+      account: "CHATGPT",
+      total_pl: 284,
+      pl_pct: 0.284,
+      equity: 100284,
+      max_drawdown: -0.12,
+      sharpe_ratio: 0.9
+    },
+    {
+      account: "GEMINI",
+      total_pl: 39,
+      pl_pct: 0.039,
+      equity: 99961,
+      max_drawdown: -0.15,
+      sharpe_ratio: 0.3
+    },
+    {
+      account: "CLAUDE",
+      total_pl: -120,
+      pl_pct: -0.12,
+      equity: 99880,
+      max_drawdown: -0.18,
+      sharpe_ratio: -0.2
+    },
+    {
+      account: "GROK",
+      total_pl: 180,
+      pl_pct: 0.18,
+      equity: 100180,
+      max_drawdown: -0.09,
+      sharpe_ratio: 0.7
+    }
+  ],
+  avg_individual_pl: 95.75,
+  council_advantage: 259.25
+};
