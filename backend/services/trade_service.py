@@ -4,6 +4,7 @@ import logging
 from typing import Dict, List, Optional, Any
 
 from backend.db.pitch_db import find_pitch_by_id
+from backend.db.execution_db import log_execution_event
 from backend.multi_alpaca_client import MultiAlpacaManager
 from backend.alpaca_integration.orders import create_bracket_order_from_pitch
 
@@ -187,6 +188,24 @@ class TradeService:
                             f"qty={order_result.get('qty')}"
                         )
 
+                        # Log order_placed event
+                        week_id = pitch.get("week_id", "unknown")
+                        await log_execution_event(
+                            week_id=week_id,
+                            event_type="order_placed",
+                            account=account_name,
+                            event_data={
+                                "trade_id": trade_id,
+                                "symbol": order_result.get("symbol"),
+                                "side": order_result.get("side"),
+                                "qty": order_result.get("qty"),
+                                "order_id": order_result.get("order_id"),
+                                "limit_price": order_result.get("limit_price"),
+                                "take_profit_price": order_result.get("take_profit_price"),
+                                "stop_loss_price": order_result.get("stop_loss_price"),
+                            }
+                        )
+
                         results.append(
                             {
                                 "trade_id": trade_id,
@@ -218,6 +237,21 @@ class TradeService:
                                     break
                     else:
                         logger.error(f"Failed to create bracket order for trade {trade_id}")
+
+                        # Log order_failed event
+                        week_id = pitch.get("week_id", "unknown")
+                        await log_execution_event(
+                            week_id=week_id,
+                            event_type="order_failed",
+                            account=account_name,
+                            event_data={
+                                "trade_id": trade_id,
+                                "symbol": pitch.get("symbol"),
+                                "direction": pitch.get("direction"),
+                                "error": "Failed to create bracket order",
+                            }
+                        )
+
                         results.append(
                             {
                                 "trade_id": trade_id,
@@ -231,6 +265,22 @@ class TradeService:
                         f"Order submission failed for trade {trade_id}: {e}",
                         exc_info=True,
                     )
+
+                    # Log order_failed event
+                    week_id = pitch.get("week_id", "unknown")
+                    await log_execution_event(
+                        week_id=week_id,
+                        event_type="order_failed",
+                        account=account_name,
+                        event_data={
+                            "trade_id": trade_id,
+                            "symbol": pitch.get("symbol"),
+                            "direction": pitch.get("direction"),
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                        }
+                    )
+
                     results.append(
                         {
                             "trade_id": trade_id,
