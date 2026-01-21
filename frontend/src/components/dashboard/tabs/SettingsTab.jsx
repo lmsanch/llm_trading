@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
+import { Select } from "../ui/Select";
 import { Save, Eye, EyeOff, Check, Key, Search } from 'lucide-react';
 
 export default function SettingsTab() {
@@ -176,14 +177,14 @@ export default function SettingsTab() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Search Provider</label>
-                <select
-                  className="w-full p-2 border rounded-md"
+                <Select
+                  className="w-full"
                   value={searchSettings.default_provider}
                   onChange={(e) => setSearchSettings(prev => ({ ...prev, default_provider: e.target.value }))}
                 >
                   <option value="tavily">Tavily</option>
                   <option value="brave">Brave</option>
-                </select>
+                </Select>
               </div>
 
               <div className="space-y-2">
