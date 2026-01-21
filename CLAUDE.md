@@ -708,9 +708,8 @@ Manages 6 parallel paper trading accounts for strategy comparison. See [docs/ALP
 - Per-account P&L and performance metrics
 
 **Account Configuration:**
-- Individual PM accounts (GPT-5.1, Gemini 3 Pro, Sonnet 4.5, Grok)
-- Council synthesis account (Chairman decisions)
-- Baseline account (FLAT / no trades)
+- Individual PM accounts (CHATGPT/GPT-5.1, GEMINI/Gemini 3 Pro, CLAUDE/Sonnet 4.5, GROQ/Grok, DEEPSEEK/Deepseek)
+- Council synthesis account (COUNCIL/Chairman decisions)
 
 ### Research Providers
 
