@@ -4,6 +4,8 @@ import logging
 from typing import Dict, List, Optional, Any
 
 from backend.db_helpers import fetch_one, fetch_all
+from backend.cache.decorator import cached
+from backend.cache.keys import research_history_key
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +124,10 @@ async def get_research_by_id(report_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+@cached(
+    key_builder=lambda days=90: research_history_key(days),
+    ttl=300  # 5 minutes - research is generated at most once per day
+)
 async def get_research_history(days: int = 90) -> Dict[str, Any]:
     """
     Get research history grouped by date and provider.
