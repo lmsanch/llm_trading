@@ -43,12 +43,13 @@ def pytest_configure(config):
 
 # ==================== Async Test Support ====================
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def event_loop():
-    """Create an event loop for the test session.
+    """Create an event loop for each test function.
 
-    This fixture ensures all async tests in a session share the same event loop,
-    which is required for pytest-asyncio to work correctly.
+    This fixture creates a new event loop for each async test,
+    which is required for pytest-asyncio 0.21+ to work correctly.
+    Using function scope prevents "Event loop is closed" errors.
     """
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop

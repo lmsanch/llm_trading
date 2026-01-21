@@ -13,19 +13,26 @@ import asyncio
 import os
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from contextlib import asynccontextmanager
 
 # Import the pool module
 from backend.db import pool
 
 
 # Helper to create proper async context manager for connection acquisition
+class MockAcquireContext:
+    """Mock async context manager for pool.acquire()."""
+    def __init__(self, mock_conn):
+        self.mock_conn = mock_conn
+
+    async def __aenter__(self):
+        return self.mock_conn
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        return False
+
 def create_acquire_context(mock_conn):
     """Create a proper async context manager for pool.acquire()."""
-    @asynccontextmanager
-    async def acquire_context():
-        yield mock_conn
-    return acquire_context()
+    return MockAcquireContext(mock_conn)
 
 
 @pytest.fixture(autouse=True)
