@@ -111,6 +111,8 @@ CREATE TABLE IF NOT EXISTS research_reports (
 
 CREATE INDEX IF NOT EXISTS idx_research_week_provider ON research_reports(week_id, provider);
 CREATE INDEX IF NOT EXISTS idx_research_status ON research_reports(status);
+CREATE INDEX IF NOT EXISTS idx_research_status_created_at ON research_reports(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_research_created_at ON research_reports(created_at DESC);
 
 -- JSONB indexes for querying structured fields
 CREATE INDEX IF NOT EXISTS idx_research_macro_regime ON research_reports USING GIN ((structured_json->'macro_regime'));
