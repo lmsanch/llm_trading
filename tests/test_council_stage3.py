@@ -2,6 +2,12 @@
 
 This module tests stage3_synthesize_final which queries the chairman model
 to synthesize a final response based on all Stage 1 and Stage 2 data.
+
+Tests include:
+- Schema validation for return structure
+- Required fields presence and types
+- Successful synthesis flow
+- Error handling and fallback behavior
 """
 
 import pytest
@@ -555,3 +561,315 @@ class TestStage3SynthesizeFinal:
             # Verify both stage sections exist
             assert "STAGE 1" in prompt or "Stage 1" in prompt
             assert "STAGE 2" in prompt or "Stage 2" in prompt
+
+
+class TestStage3SchemaValidation:
+    """Test suite for Stage 3 return value schema validation."""
+
+    def _convert_stage2_format(self, stage2_data):
+        """Convert fixture format (ranking_text) to expected format (ranking)."""
+        return [
+            {"model": r["model"], "ranking": r["ranking_text"], "parsed_ranking": []}
+            for r in stage2_data
+        ]
+
+    @pytest.mark.asyncio
+    async def test_schema_has_required_fields(self, mock_stage1_responses, mock_stage2_rankings):
+        """Test that return value has exactly the required fields."""
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        mock_chairman_response = {
+            "content": "Test response",
+            "model": "anthropic/claude-opus-4"
+        }
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_chairman_response
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify required fields are present
+            required_fields = ["model", "response"]
+            for field in required_fields:
+                assert field in result, f"Missing required field: {field}"
+
+    @pytest.mark.asyncio
+    async def test_schema_field_types(self, mock_stage1_responses, mock_stage2_rankings):
+        """Test that all fields have correct types."""
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        mock_chairman_response = {
+            "content": "Test response content",
+            "model": "anthropic/claude-opus-4"
+        }
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_chairman_response
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify field types
+            assert isinstance(result["model"], str), "model field must be a string"
+            assert isinstance(result["response"], str), "response field must be a string"
+
+    @pytest.mark.asyncio
+    async def test_schema_no_extra_fields(self, mock_stage1_responses, mock_stage2_rankings):
+        """Test that return value does not contain unexpected extra fields."""
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        mock_chairman_response = {
+            "content": "Test response",
+            "model": "anthropic/claude-opus-4",
+            "extra_field": "Should not appear",
+            "reasoning_details": "Should not appear"
+        }
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_chairman_response
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify only expected fields are present
+            expected_fields = {"model", "response"}
+            actual_fields = set(result.keys())
+            assert actual_fields == expected_fields, \
+                f"Unexpected fields: {actual_fields - expected_fields}"
+
+    @pytest.mark.asyncio
+    async def test_schema_model_field_non_empty(self, mock_stage1_responses, mock_stage2_rankings):
+        """Test that model field is non-empty string."""
+        from backend.config import CHAIRMAN_MODEL
+
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        mock_chairman_response = {
+            "content": "Test response",
+            "model": CHAIRMAN_MODEL
+        }
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_chairman_response
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify model field is non-empty
+            assert result["model"], "model field must be non-empty"
+            assert len(result["model"]) > 0, "model field must have length > 0"
+
+    @pytest.mark.asyncio
+    async def test_schema_response_field_is_string(self, mock_stage1_responses, mock_stage2_rankings):
+        """Test that response field is string (may be empty)."""
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        mock_chairman_response = {
+            "content": "",  # Empty but valid
+            "model": "anthropic/claude-opus-4"
+        }
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_chairman_response
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify response field is string (can be empty)
+            assert isinstance(result["response"], str), "response must be string"
+
+    @pytest.mark.asyncio
+    async def test_schema_fallback_response_structure(self, mock_stage1_responses, mock_stage2_rankings):
+        """Test that fallback response has correct schema."""
+        from backend.config import CHAIRMAN_MODEL
+
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = None  # Simulate failure
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify fallback has same schema
+            assert isinstance(result, dict), "fallback must be dict"
+            assert "model" in result, "fallback must have model field"
+            assert "response" in result, "fallback must have response field"
+            assert isinstance(result["model"], str), "fallback model must be string"
+            assert isinstance(result["response"], str), "fallback response must be string"
+            assert result["model"] == CHAIRMAN_MODEL, "fallback must use chairman model"
+
+    @pytest.mark.asyncio
+    async def test_schema_consistency_across_calls(self, mock_stage1_responses, mock_stage2_rankings):
+        """Test that schema is consistent across multiple calls."""
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        mock_responses = [
+            {"content": "Response 1", "model": "anthropic/claude-opus-4"},
+            {"content": "Response 2", "model": "anthropic/claude-opus-4"},
+            {"content": "Response 3", "model": "anthropic/claude-opus-4"},
+        ]
+
+        results = []
+        for mock_response in mock_responses:
+            with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+                mock_query.return_value = mock_response
+
+                result = await stage3_synthesize_final(
+                    user_query, mock_stage1_responses, stage2_formatted
+                )
+                results.append(result)
+
+        # Verify all results have identical schema structure
+        first_keys = set(results[0].keys())
+        for i, result in enumerate(results[1:], start=2):
+            result_keys = set(result.keys())
+            assert result_keys == first_keys, \
+                f"Result {i} has different keys: {result_keys} vs {first_keys}"
+
+    @pytest.mark.asyncio
+    async def test_schema_model_field_matches_chairman(self, mock_stage1_responses, mock_stage2_rankings):
+        """Test that model field always contains the chairman model identifier."""
+        from backend.config import CHAIRMAN_MODEL
+
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        mock_chairman_response = {
+            "content": "Test response",
+            "model": CHAIRMAN_MODEL
+        }
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_chairman_response
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify model field matches chairman model
+            assert result["model"] == CHAIRMAN_MODEL, \
+                f"Expected model to be {CHAIRMAN_MODEL}, got {result['model']}"
+
+    @pytest.mark.asyncio
+    async def test_schema_response_preserves_content(self, mock_stage1_responses, mock_stage2_rankings):
+        """Test that response field contains the exact content from chairman."""
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        expected_content = "This is the exact chairman response with specific content."
+        mock_chairman_response = {
+            "content": expected_content,
+            "model": "anthropic/claude-opus-4"
+        }
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_chairman_response
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify response contains exact content
+            assert result["response"] == expected_content, \
+                "Response field should preserve exact content from chairman"
+
+    @pytest.mark.asyncio
+    async def test_schema_handles_multiline_response(self, mock_stage1_responses, mock_stage2_rankings):
+        """Test that schema handles multiline response content correctly."""
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        multiline_content = """Line 1: Introduction
+Line 2: Analysis
+Line 3: Conclusion
+
+Final thoughts."""
+
+        mock_chairman_response = {
+            "content": multiline_content,
+            "model": "anthropic/claude-opus-4"
+        }
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_chairman_response
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify multiline content is preserved
+            assert result["response"] == multiline_content
+            assert "\n" in result["response"]
+            assert result["response"].count("\n") == multiline_content.count("\n")
+
+    @pytest.mark.asyncio
+    async def test_schema_handles_special_characters_in_response(
+        self, mock_stage1_responses, mock_stage2_rankings
+    ):
+        """Test that schema handles special characters in response."""
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        special_content = 'Response with "quotes", {brackets}, $symbols, and \\ backslashes'
+        mock_chairman_response = {
+            "content": special_content,
+            "model": "anthropic/claude-opus-4"
+        }
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_chairman_response
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify special characters are preserved
+            assert result["response"] == special_content
+            assert '"' in result["response"]
+            assert '{' in result["response"]
+            assert '$' in result["response"]
+
+    @pytest.mark.asyncio
+    async def test_schema_validates_result_is_serializable(
+        self, mock_stage1_responses, mock_stage2_rankings
+    ):
+        """Test that result can be JSON serialized (important for API responses)."""
+        import json
+
+        user_query = "Test query"
+        stage2_formatted = self._convert_stage2_format(mock_stage2_rankings)
+
+        mock_chairman_response = {
+            "content": "Test response",
+            "model": "anthropic/claude-opus-4"
+        }
+
+        with patch('backend.council.query_model', new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_chairman_response
+
+            result = await stage3_synthesize_final(
+                user_query, mock_stage1_responses, stage2_formatted
+            )
+
+            # Verify result is JSON serializable
+            try:
+                json_str = json.dumps(result)
+                deserialized = json.loads(json_str)
+                assert deserialized == result
+            except (TypeError, ValueError) as e:
+                pytest.fail(f"Result is not JSON serializable: {e}")
