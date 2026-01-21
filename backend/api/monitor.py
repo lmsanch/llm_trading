@@ -1,9 +1,10 @@
 """Monitoring API endpoints for positions and accounts."""
 
 import logging
-from typing import Dict, Any, List
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,23 @@ class AccountSummary(BaseModel):
     cash: float = Field(description="Available cash balance")
     pl: float = Field(
         description="Profit/loss relative to starting balance ($100,000)"
+    )
+
+
+class PerformanceDataPoint(BaseModel):
+    """Response model for a single performance data point."""
+
+    date: str = Field(description="Date in YYYY-MM-DD format")
+    equity: float = Field(description="Total portfolio value at that date")
+    pl: float = Field(description="Cumulative P/L relative to $100,000 starting balance")
+
+
+class PerformanceHistory(BaseModel):
+    """Response model for performance history."""
+
+    account: str = Field(description="Account name (e.g., 'COUNCIL', 'CHATGPT')")
+    history: List[PerformanceDataPoint] = Field(
+        description="Time-series performance data"
     )
 
 
@@ -267,3 +285,154 @@ async def get_accounts() -> List[AccountSummary]:
         logger.error(f"Error getting accounts: {e}", exc_info=True)
         logger.warning("Falling back to mock accounts data")
         return MOCK_ACCOUNTS
+
+
+def _generate_mock_performance_history(
+    account: str, days: int
+) -> List[Dict[str, Any]]:
+    """
+    Generate mock performance history for an account.
+
+    Creates realistic-looking performance data by simulating daily P/L changes
+    based on account characteristics. Used as fallback when historical data
+    is unavailable.
+
+    Args:
+        account: Account name (e.g., 'COUNCIL', 'CHATGPT')
+        days: Number of days of history to generate
+
+    Returns:
+        List of performance data points, each containing:
+            - date: Date in YYYY-MM-DD format
+            - equity: Portfolio value at that date
+            - pl: Cumulative P/L relative to $100,000
+
+    Notes:
+        - COUNCIL account has positive trend (outperforming)
+        - Individual PM accounts have mixed performance
+        - CLAUDE (baseline) stays flat at $100,000
+        - Data simulates realistic volatility and trends
+    """
+    # Account-specific performance parameters
+    performance_profiles = {
+        "COUNCIL": {"daily_drift": 0.0015, "volatility": 0.008},  # +0.15%/day avg
+        "CHATGPT": {"daily_drift": 0.0008, "volatility": 0.010},  # +0.08%/day avg
+        "GEMINI": {"daily_drift": -0.0002, "volatility": 0.012},  # -0.02%/day avg
+        "CLAUDE": {"daily_drift": 0.0, "volatility": 0.0},  # Baseline: flat
+        "GROQ": {"daily_drift": 0.0006, "volatility": 0.009},  # +0.06%/day avg
+        "DEEPSEEK": {"daily_drift": 0.0001, "volatility": 0.007},  # +0.01%/day avg
+    }
+
+    profile = performance_profiles.get(
+        account, {"daily_drift": 0.0, "volatility": 0.008}
+    )
+
+    # Generate history from oldest to newest
+    history = []
+    base_equity = 100000.0
+    current_equity = base_equity
+
+    import random
+
+    random.seed(hash(account))  # Deterministic for same account
+
+    for i in range(days, 0, -1):
+        date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+
+        # Simulate daily return: drift + random volatility
+        if account == "CLAUDE":
+            # Baseline stays flat
+            current_equity = base_equity
+        else:
+            daily_return = profile["daily_drift"] + random.gauss(
+                0, profile["volatility"]
+            )
+            current_equity = current_equity * (1 + daily_return)
+
+        pl = current_equity - base_equity
+
+        history.append({"date": date, "equity": round(current_equity, 2), "pl": round(pl, 2)})
+
+    return history
+
+
+@router.get("/performance/history")
+async def get_performance_history(
+    account: Optional[str] = Query(None, description="Account name to filter by"),
+    days: int = Query(7, ge=1, le=365, description="Number of days of history"),
+) -> PerformanceHistory:
+    """
+    Get performance history for a specific account.
+
+    Retrieves time-series performance data showing equity and P/L evolution over time.
+    Used by frontend charts to visualize account performance trends.
+
+    Query Parameters:
+        account: Account name (e.g., 'COUNCIL', 'CHATGPT', 'GEMINI', 'CLAUDE', 'GROQ', 'DEEPSEEK')
+        days: Number of days of history (1-365, default: 7)
+
+    Returns:
+        Performance history object containing:
+            - account: The account name
+            - history: Array of daily data points with:
+                - date: Date in YYYY-MM-DD format
+                - equity: Portfolio value at that date
+                - pl: Cumulative P/L relative to $100,000 starting balance
+
+    Example Response:
+        {
+            "account": "COUNCIL",
+            "history": [
+                {
+                    "date": "2025-01-14",
+                    "equity": 100000.0,
+                    "pl": 0.0
+                },
+                {
+                    "date": "2025-01-15",
+                    "equity": 100180.5,
+                    "pl": 180.5
+                },
+                {
+                    "date": "2025-01-21",
+                    "equity": 100355.0,
+                    "pl": 355.0
+                }
+            ]
+        }
+
+    Notes:
+        - Currently returns mock data for development
+        - Future implementation will query actual performance from database
+        - COUNCIL typically shows positive trend (council advantage)
+        - CLAUDE (baseline) remains flat at $100,000
+        - Data points are ordered chronologically (oldest first)
+        - Falls back to mock data generation on error
+    """
+    try:
+        # Validate account name
+        valid_accounts = ["COUNCIL", "CHATGPT", "GEMINI", "CLAUDE", "GROQ", "DEEPSEEK"]
+        if account and account not in valid_accounts:
+            logger.warning(f"Invalid account name: {account}, using COUNCIL as default")
+            account = "COUNCIL"
+        elif not account:
+            account = "COUNCIL"
+
+        logger.info(f"Retrieving performance history for {account} (last {days} days)")
+
+        # TODO: Query actual performance data from database
+        # For now, generate mock data
+        # Future implementation:
+        # from backend.db.performance_db import get_account_performance_history
+        # history_data = await get_account_performance_history(account, days)
+
+        history_data = _generate_mock_performance_history(account, days)
+
+        logger.info(f"Retrieved {len(history_data)} data points for {account}")
+
+        return PerformanceHistory(account=account, history=history_data)
+
+    except Exception as e:
+        logger.error(f"Error getting performance history: {e}", exc_info=True)
+        # Return empty history on error
+        return PerformanceHistory(account=account or "COUNCIL", history=[])
