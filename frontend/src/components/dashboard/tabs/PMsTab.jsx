@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { PMPitchCard } from './PMPitchCard';
 import { MarketMetrics } from './MarketMetrics';
 import { Button } from "../ui/Button";
@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Play, CheckCheck, RefreshCw, Send, Loader2, Calendar, TrendingUp, FileText, ChevronDown, ChevronUp, ShieldAlert, ExternalLink, Database, Share2 } from 'lucide-react';
 import WeeklyGraphViewer from '../../WeeklyGraphViewer';
 import { useToast } from '../../../hooks/useToast';
+import { useExponentialBackoff } from '../../../hooks/useExponentialBackoff';
 
 const PM_MODELS = [
   { key: 'chatgpt', label: 'GPT-5.2', account: 'CHATGPT' },
@@ -412,8 +413,149 @@ export default function PMsTab() {
     return saved ? JSON.parse(saved) : [];
   });
   const [loadingPitches, setLoadingPitches] = useState(true);
-  const [pollingInterval, setPollingInterval] = useState(null);
   const [sendingToCouncil, setSendingToCouncil] = useState(false);
+
+  // Polling functions for batch generation
+  const pollBatchStatus = useCallback(async () => {
+    if (!jobId) return null;
+
+    const response = await fetch(`/api/pitches/status?job_id=${jobId}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch batch status');
+    }
+
+    const status = await response.json();
+
+    // Update model progress
+    const progress = {};
+    PM_MODELS.forEach(model => {
+      if (status[model.key]) {
+        progress[model.key] = status[model.key];
+      }
+    });
+    setModelProgress(progress);
+
+    return status;
+  }, [jobId]);
+
+  const handleBatchComplete = useCallback((status) => {
+    setPmStatus('complete');
+    if (status?.results?.pitches) {
+      setPitches(status.results.pitches);
+    }
+  }, []);
+
+  const handleBatchError = useCallback((error) => {
+    console.error('Batch polling error:', error);
+    setPmStatus('error');
+  }, []);
+
+  // Polling functions for individual model generation
+  const pollIndividualModels = useCallback(async () => {
+    const activeJobIds = Object.keys(modelJobIds);
+    if (activeJobIds.length === 0) return null;
+
+    // Poll all active jobs
+    const results = await Promise.all(
+      activeJobIds.map(async (modelKey) => {
+        const jid = modelJobIds[modelKey];
+        try {
+          const response = await fetch(`/api/pitches/status?job_id=${jid}`);
+          if (!response.ok) {
+            return { modelKey, status: { status: 'error', message: 'Failed to fetch status' } };
+          }
+          const status = await response.json();
+          return { modelKey, status };
+        } catch (error) {
+          return { modelKey, status: { status: 'error', message: error.message } };
+        }
+      })
+    );
+
+    // Update progress for each model
+    results.forEach(({ modelKey, status }) => {
+      if (status[modelKey]) {
+        setModelProgress(prev => ({
+          ...prev,
+          [modelKey]: status[modelKey]
+        }));
+      }
+    });
+
+    // Check if all are complete or error
+    const allDone = results.every(({ status }) =>
+      status.status === 'complete' || status.status === 'error'
+    );
+
+    return allDone ? { status: 'complete', results } : { status: 'running', results };
+  }, [modelJobIds]);
+
+  const handleIndividualComplete = useCallback(async (result) => {
+    // Clear all job IDs - this will stop polling
+    setModelJobIds({});
+
+    // Reload pitches to get the new ones
+    if (latestReport) {
+      const date = latestReport.created_at || latestReport.date;
+      const weekId = latestReport.week_id;
+
+      // Inline fetch to avoid dependency issues
+      try {
+        setLoadingPitches(true);
+        let url = '/api/pitches/current';
+        const params = new URLSearchParams();
+        if (date) params.append('research_date', date);
+        else if (weekId) params.append('week_id', weekId);
+
+        if (params.toString()) url += `?${params.toString()}`;
+
+        const response = await fetch(url);
+        if (response.ok) {
+          const pitchesData = await response.json();
+          if (pitchesData && pitchesData.length > 0) {
+            setPitches(pitchesData);
+            setPmStatus('complete');
+          }
+        }
+      } catch (error) {
+        console.error('Error reloading pitches:', error);
+      } finally {
+        setLoadingPitches(false);
+      }
+    }
+  }, [latestReport]);
+
+  const handleIndividualError = useCallback((error) => {
+    console.error('Individual polling error:', error);
+    // Clear all job IDs
+    setModelJobIds({});
+  }, []);
+
+  // Use exponential backoff for batch generation
+  useExponentialBackoff(
+    pollBatchStatus,
+    pmStatus === 'generating' && !!jobId,
+    handleBatchComplete,
+    handleBatchError,
+    {
+      initialDelay: 1000,
+      maxDelay: 8000,
+      backoffMultiplier: 2
+    }
+  );
+
+  // Use exponential backoff for individual model generation
+  useExponentialBackoff(
+    pollIndividualModels,
+    Object.keys(modelJobIds).length > 0,
+    handleIndividualComplete,
+    handleIndividualError,
+    {
+      initialDelay: 1000,
+      maxDelay: 8000,
+      backoffMultiplier: 2
+    }
+  );
 
   // Load research history and market metrics on mount
   useEffect(() => {
@@ -432,16 +574,6 @@ export default function PMsTab() {
     sessionStorage.setItem('pm_model_progress', JSON.stringify(modelProgress));
     sessionStorage.setItem('pm_pitches', JSON.stringify(pitches));
   }, [selectedResearch, pmStatus, jobId, modelJobIds, modelProgress, pitches]);
-
-  // Resume polling if page was refreshed during generation
-  useEffect(() => {
-    if (pmStatus === 'generating' && jobId) {
-      startPolling(jobId);
-    }
-    return () => {
-      if (pollingInterval) clearInterval(pollingInterval);
-    };
-  }, []);
 
   const loadResearchHistory = async () => {
     try {
@@ -586,122 +718,6 @@ export default function PMsTab() {
     }
   }, [latestReport]);
 
-  const startPolling = (jid) => {
-    if (pollingInterval) clearInterval(pollingInterval);
-
-    const interval = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/pitches/status?job_id=${jid}`);
-        if (!response.ok) {
-          clearInterval(interval);
-          setPmStatus('error');
-          return;
-        }
-
-        const status = await response.json();
-
-        // Update model progress
-        const progress = {};
-        PM_MODELS.forEach(model => {
-          if (status[model.key]) {
-            progress[model.key] = status[model.key];
-          }
-        });
-        setModelProgress(progress);
-
-        // Check if complete
-        if (status.status === 'complete') {
-          clearInterval(interval);
-          setPmStatus('complete');
-          if (status.results?.pitches) {
-            setPitches(status.results.pitches);
-          }
-        } else if (status.status === 'error') {
-          clearInterval(interval);
-          setPmStatus('error');
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
-    }, 2500);
-
-    setPollingInterval(interval);
-  };
-
-  // Poll for a single model's job
-  const startPollingForModel = (jid, modelKey) => {
-    const interval = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/pitches/status?job_id=${jid}`);
-        if (!response.ok) {
-          clearInterval(interval);
-          setModelProgress(prev => ({
-            ...prev,
-            [modelKey]: { status: 'error', message: 'Failed to fetch status' }
-          }));
-          // Remove job ID when done
-          setModelJobIds(prev => {
-            const next = { ...prev };
-            delete next[modelKey];
-            return next;
-          });
-          return;
-        }
-
-        const status = await response.json();
-
-        // Update this model's progress
-        if (status[modelKey]) {
-          setModelProgress(prev => ({
-            ...prev,
-            [modelKey]: status[modelKey]
-          }));
-        }
-
-        // Check if complete or error
-        if (status.status === 'complete' || status.status === 'error') {
-          clearInterval(interval);
-          
-          // Update final status
-          if (status[modelKey]) {
-            setModelProgress(prev => ({
-              ...prev,
-              [modelKey]: status[modelKey]
-            }));
-          }
-
-          // Reload pitches to get the new one
-          if (latestReport) {
-            const date = latestReport.created_at || latestReport.date;
-            loadLatestPitches(latestReport.week_id, date);
-          }
-
-          // Remove job ID when done
-          setModelJobIds(prev => {
-            const next = { ...prev };
-            delete next[modelKey];
-            return next;
-          });
-        }
-      } catch (error) {
-        console.error('Polling error for model:', modelKey, error);
-        clearInterval(interval);
-        setModelProgress(prev => ({
-          ...prev,
-          [modelKey]: { status: 'error', message: error.message }
-        }));
-        setModelJobIds(prev => {
-          const next = { ...prev };
-          delete next[modelKey];
-          return next;
-        });
-      }
-    }, 2500);
-
-    // Store interval per model (we'll need to track multiple intervals)
-    // For now, just let it run - we'll clean up on unmount
-  };
-
   const handleGeneratePitches = async (modelKey = null) => {
     if (!selectedResearch) return;
 
@@ -736,19 +752,16 @@ export default function PMsTab() {
       }
 
       const result = await response.json();
-      
+
       if (modelKey) {
-        // Track per-model job ID
+        // Track per-model job ID - hook will automatically start polling
         setModelJobIds(prev => ({
           ...prev,
           [modelKey]: result.job_id
         }));
-        // Start polling for this specific model
-        startPollingForModel(result.job_id, modelKey);
       } else {
-        // All models - use legacy jobId
+        // All models - use legacy jobId - hook will automatically start polling
         setJobId(result.job_id);
-        startPolling(result.job_id);
       }
     } catch (error) {
       console.error('Error starting pitch generation:', error);
@@ -770,13 +783,14 @@ export default function PMsTab() {
   };
 
   const handleReset = () => {
-    if (pollingInterval) clearInterval(pollingInterval);
     setPmStatus('idle');
     setJobId('');
+    setModelJobIds({});
     setModelProgress({});
     setPitches([]);
     sessionStorage.removeItem('pm_status');
     sessionStorage.removeItem('pm_job_id');
+    sessionStorage.removeItem('pm_model_job_ids');
     sessionStorage.removeItem('pm_model_progress');
     sessionStorage.removeItem('pm_pitches');
   };

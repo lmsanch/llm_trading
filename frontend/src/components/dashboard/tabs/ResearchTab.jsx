@@ -7,6 +7,7 @@ import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Skeleton } from "../ui/Skeleton";
+import { useExponentialBackoff } from '../../../hooks/useExponentialBackoff';
 import {
   Play,
   CheckCheck,
@@ -160,34 +161,37 @@ export default function ResearchTab() {
     fetchData();
   }, []);
 
-  // Poll every 2.5 seconds when running
-  useEffect(() => {
-    let interval;
-    if (researchState === 'running' && jobId) {
-      interval = setInterval(async () => {
-        try {
-          const response = await fetch(`/api/research/status?job_id=${jobId}`);
-          if (!response.ok) throw new Error("Failed to poll status");
-          const status = await response.json();
-          setPollingStatusWithPersist(status);
+  // Poll with exponential backoff when running
+  const pollFn = useCallback(async () => {
+    const response = await fetch(`/api/research/status?job_id=${jobId}`);
+    if (!response.ok) throw new Error("Failed to poll status");
+    const status = await response.json();
+    setPollingStatusWithPersist(status);
+    return status;
+  }, [jobId, setPollingStatusWithPersist]);
 
-          if (status.status === 'complete') {
-            clearInterval(interval);
-            const resultsResponse = await fetch(`/api/research/${jobId}`);
-            const data = await resultsResponse.json();
-            setResearchDataWithPersist(data);
-            setResearchStateWithPersist('complete');
-          } else if (status.status === 'error') {
-            clearInterval(interval);
-            setResearchStateWithPersist('error');
-          }
-        } catch (error) {
-          console.error("Polling error:", error);
-        }
-      }, 2500);
+  const handlePollComplete = useCallback(async (result) => {
+    const resultsResponse = await fetch(`/api/research/${jobId}`);
+    const data = await resultsResponse.json();
+    setResearchDataWithPersist(data);
+    setResearchStateWithPersist('complete');
+  }, [jobId, setResearchDataWithPersist, setResearchStateWithPersist]);
+
+  const handlePollError = useCallback((error) => {
+    setResearchStateWithPersist('error');
+  }, [setResearchStateWithPersist]);
+
+  useExponentialBackoff(
+    pollFn,
+    researchState === 'running' && !!jobId,
+    handlePollComplete,
+    handlePollError,
+    {
+      initialDelay: 1000,
+      maxDelay: 8000,
+      backoffMultiplier: 2
     }
-    return () => clearInterval(interval);
-  }, [researchState, jobId, setPollingStatusWithPersist, setResearchDataWithPersist, setResearchStateWithPersist]);
+  );
 
   const handleStartReview = () => {
     setResearchStateWithPersist('reviewing');
