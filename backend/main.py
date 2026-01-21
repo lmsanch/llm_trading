@@ -4,11 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.pipeline.stages.research import get_week_id
 from backend.config import get_cors_origins
-from backend.redis_client import init_redis_pool, get_redis_pool, close_redis_pool, close_redis_client
+from backend.redis_client import get_redis_client, close_redis_client
 from backend.db.pool import init_pool, close_pool, check_pool_health
-from backend.cache import cached
-import time
-from datetime import datetime
+from backend.http_pool import init_http_clients, close_http_clients, check_http_clients_health
 
 
 class PipelineState:
@@ -79,17 +77,24 @@ async def startup_event():
         print(f"✗ Database pool initialization failed: {e}")
         print("  Application will continue but database operations may fail")
 
-    # Initialize Redis connection pool
+    # Initialize Redis client
     try:
-        await init_redis_pool()
-        pool = get_redis_pool()
-        if await pool.ping():
+        redis_client = get_redis_client()
+        if redis_client.ping():
             print("✓ Redis connected successfully")
         else:
             print("✗ Redis ping failed - caching will be disabled")
     except Exception as e:
         print(f"✗ Redis initialization failed: {e}")
         print("  Application will continue without caching")
+
+    # Initialize HTTP clients
+    try:
+        await init_http_clients()
+        print("✓ HTTP clients initialized")
+    except Exception as e:
+        print(f"✗ HTTP clients initialization failed: {e}")
+        print("  Application will continue but HTTP operations may fail")
 
 
 @app.on_event("shutdown")
@@ -101,9 +106,13 @@ async def shutdown_event():
     await close_pool()
     print("✓ Database connection pool closed")
 
-    # Close Redis connection pool
-    await close_redis_pool()
+    # Close Redis client
+    close_redis_client()
     print("✓ Redis connection closed")
+
+    # Close HTTP clients
+    await close_http_clients()
+    print("✓ HTTP clients closed")
 
 
 @app.get("/")
@@ -122,18 +131,19 @@ async def root():
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint that verifies Redis and PostgreSQL pool connectivity."""
+    """Health check endpoint that verifies Redis, PostgreSQL pool, and HTTP clients connectivity."""
     status = {
         "status": "ok",
         "service": "LLM Council API",
         "redis": "unknown",
-        "database": "unknown"
+        "database": "unknown",
+        "http_clients": "unknown"
     }
 
-    # Check Redis connectivity (async)
+    # Check Redis connectivity
     try:
-        redis_pool = get_redis_pool()
-        if await redis_pool.ping():
+        redis_client = get_redis_client()
+        if redis_client.ping():
             status["redis"] = "connected"
         else:
             status["redis"] = "disconnected"
@@ -156,35 +166,21 @@ async def health_check():
         }
         status["status"] = "degraded"
 
+    # Check HTTP clients health
+    try:
+        http_health = await check_http_clients_health()
+        status["http_clients"] = http_health
+
+        if http_health["status"] != "healthy":
+            status["status"] = "degraded"
+    except Exception as e:
+        status["http_clients"] = {
+            "status": "error",
+            "error": str(e)
+        }
+        status["status"] = "degraded"
+
     return status
-
-
-@app.get("/api/test/cached")
-@cached(key="test:cached:simple", ttl=60)
-async def test_cached_endpoint():
-    """Test endpoint to verify cache decorator works with async Redis.
-
-    This endpoint is cached with a 60-second TTL. The first call will be a cache MISS
-    and will simulate some work. Subsequent calls within 60 seconds should be cache HITs
-    from Redis.
-
-    Usage for testing:
-        1. First call: curl http://localhost:8200/api/test/cached
-           Expected: Cache MISS, response takes ~100ms
-        2. Second call (within 60s): curl http://localhost:8200/api/test/cached
-           Expected: Cache HIT, response is instant
-        3. Check Redis: redis-cli KEYS *
-           Expected: See key "test:cached:simple"
-    """
-    # Simulate some work
-    time.sleep(0.1)  # 100ms delay
-
-    return {
-        "status": "ok",
-        "message": "This response was generated (not from cache)",
-        "timestamp": datetime.now().isoformat(),
-        "note": "If you see the same timestamp on refresh, it's a cache hit!"
-    }
 
 
 if __name__ == "__main__":

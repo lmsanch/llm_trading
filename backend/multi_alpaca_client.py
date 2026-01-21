@@ -2,9 +2,9 @@
 
 import os
 import asyncio
-import httpx
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
+from backend.http_pool import get_alpaca_client
 
 load_dotenv()
 
@@ -84,22 +84,18 @@ class AlpacaAccountClient:
     
     async def get_account(self) -> Dict[str, Any]:
         """Get account information."""
-        async with httpx.AsyncClient(
-            base_url=self.base_url, headers=self.headers
-        ) as client:
-            response = await client.get("/v2/account")
-            response.raise_for_status()
-            return response.json()
+        client = get_alpaca_client()
+        response = await client.get(f"{self.base_url}/v2/account", headers=self.headers)
+        response.raise_for_status()
+        return response.json()
     
     async def get_positions(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all positions or specific symbol position."""
         endpoint = f"/v2/positions/{symbol}" if symbol else "/v2/positions"
-        async with httpx.AsyncClient(
-            base_url=self.base_url, headers=self.headers
-        ) as client:
-            response = await client.get(endpoint)
-            response.raise_for_status()
-            return response.json()
+        client = get_alpaca_client()
+        response = await client.get(f"{self.base_url}{endpoint}", headers=self.headers)
+        response.raise_for_status()
+        return response.json()
     
     async def get_orders(
         self,
@@ -115,13 +111,11 @@ class AlpacaAccountClient:
             params["limit"] = limit
         if symbol:
             params["symbol"] = symbol
-        
-        async with httpx.AsyncClient(
-            base_url=self.base_url, headers=self.headers
-        ) as client:
-            response = await client.get("/v2/orders", params=params)
-            response.raise_for_status()
-            return response.json()
+
+        client = get_alpaca_client()
+        response = await client.get(f"{self.base_url}/v2/orders", params=params, headers=self.headers)
+        response.raise_for_status()
+        return response.json()
     
     async def place_order(
         self,
@@ -163,26 +157,22 @@ class AlpacaAccountClient:
             payload["limit_price"] = limit_price
         if stop_price:
             payload["stop_price"] = stop_price
-        
-        async with httpx.AsyncClient(
-            base_url=self.base_url, headers=self.headers
-        ) as client:
-            response = await client.post("/v2/orders", json=payload)
-            if response.status_code != 200:
-                error_data = response.json()
-                raise Exception(
-                    f"Order failed for {self.account_name}: {error_data.get('message', 'Unknown error')}"
-                )
-            return response.json()
+
+        client = get_alpaca_client()
+        response = await client.post(f"{self.base_url}/v2/orders", json=payload, headers=self.headers)
+        if response.status_code != 200:
+            error_data = response.json()
+            raise Exception(
+                f"Order failed for {self.account_name}: {error_data.get('message', 'Unknown error')}"
+            )
+        return response.json()
     
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         """Cancel an order by ID."""
-        async with httpx.AsyncClient(
-            base_url=self.base_url, headers=self.headers
-        ) as client:
-            response = await client.delete(f"/v2/orders/{order_id}")
-            response.raise_for_status()
-            return response.json()
+        client = get_alpaca_client()
+        response = await client.delete(f"{self.base_url}/v2/orders/{order_id}", headers=self.headers)
+        response.raise_for_status()
+        return response.json()
     
     async def close_position(self, symbol: str) -> Dict[str, Any]:
         """
@@ -257,12 +247,10 @@ class AlpacaAccountClient:
         if end:
             params["end"] = end
 
-        async with httpx.AsyncClient(
-            base_url=data_base_url, headers=self.headers
-        ) as client:
-            response = await client.get(f"/v2/stocks/{symbol}/bars", params=params)
-            response.raise_for_status()
-            return response.json().get("bars", [])
+        client = get_alpaca_client()
+        response = await client.get(f"{data_base_url}/v2/stocks/{symbol}/bars", params=params, headers=self.headers)
+        response.raise_for_status()
+        return response.json().get("bars", [])
 
 
 # ============================================================================

@@ -1,8 +1,8 @@
 """OpenRouter API client for making LLM requests."""
 
-import httpx
 from typing import List, Dict, Any, Optional
 from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL
+from .http_pool import get_openrouter_client
 
 
 async def query_model(
@@ -35,19 +35,19 @@ async def query_model(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                OPENROUTER_API_URL, headers=headers, json=payload
-            )
-            response.raise_for_status()
+        client = get_openrouter_client()
+        response = await client.post(
+            OPENROUTER_API_URL, headers=headers, json=payload, timeout=timeout
+        )
+        response.raise_for_status()
 
-            data = response.json()
-            message = data["choices"][0]["message"]
+        data = response.json()
+        message = data["choices"][0]["message"]
 
-            return {
-                "content": message.get("content"),
-                "reasoning_details": message.get("reasoning_details"),
-            }
+        return {
+            "content": message.get("content"),
+            "reasoning_details": message.get("reasoning_details"),
+        }
 
     except Exception as e:
         print(f"Error querying model {model}: {e}")

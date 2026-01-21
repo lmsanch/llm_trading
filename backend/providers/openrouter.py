@@ -4,6 +4,7 @@ import os
 import httpx
 from typing import List, Dict, Any, Optional
 from .base import BaseLLMProvider, ProviderConfig, ModelResponse
+from backend.http_pool import get_openrouter_client
 
 
 class OpenRouterProvider(BaseLLMProvider):
@@ -55,24 +56,24 @@ class OpenRouterProvider(BaseLLMProvider):
         payload.update(kwargs)
 
         try:
-            async with httpx.AsyncClient(timeout=self.config.timeout) as client:
-                response = await client.post(
-                    self.api_url, headers=headers, json=payload
-                )
-                response.raise_for_status()
+            client = get_openrouter_client()
+            response = await client.post(
+                self.api_url, headers=headers, json=payload
+            )
+            response.raise_for_status()
 
-                data = response.json()
-                choice = data["choices"][0]
-                message = choice["message"]
+            data = response.json()
+            choice = data["choices"][0]
+            message = choice["message"]
 
-                return ModelResponse(
-                    content=message.get("content"),
-                    reasoning_details=message.get("reasoning_details"),
-                    model=data.get("model"),
-                    prompt_tokens=data.get("usage", {}).get("prompt_tokens"),
-                    completion_tokens=data.get("usage", {}).get("completion_tokens"),
-                    total_tokens=data.get("usage", {}).get("total_tokens"),
-                )
+            return ModelResponse(
+                content=message.get("content"),
+                reasoning_details=message.get("reasoning_details"),
+                model=data.get("model"),
+                prompt_tokens=data.get("usage", {}).get("prompt_tokens"),
+                completion_tokens=data.get("usage", {}).get("completion_tokens"),
+                total_tokens=data.get("usage", {}).get("total_tokens"),
+            )
 
         except httpx.HTTPStatusError as e:
             raise Exception(

@@ -43,13 +43,12 @@ def pytest_configure(config):
 
 # ==================== Async Test Support ====================
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def event_loop():
-    """Create an event loop for each test function.
+    """Create an event loop for the test session.
 
-    This fixture creates a new event loop for each async test,
-    which is required for pytest-asyncio 0.21+ to work correctly.
-    Using function scope prevents "Event loop is closed" errors.
+    This fixture ensures all async tests in a session share the same event loop,
+    which is required for pytest-asyncio to work correctly.
     """
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
@@ -147,6 +146,34 @@ def temp_storage_dir(tmp_path) -> Path:
     storage_dir = tmp_path / "conversations"
     storage_dir.mkdir(exist_ok=True)
     return storage_dir
+
+
+# ==================== HTTP Client Pool Fixtures ====================
+
+@pytest.fixture(scope="function")
+async def init_http_pool():
+    """Initialize HTTP client pool before tests and cleanup after.
+
+    This fixture should be used by tests that need initialized HTTP clients
+    (e.g., AlpacaAccountClient tests). Tests that test the initialization
+    logic itself (test_http_pool.py) should NOT use this fixture.
+
+    Usage:
+        @pytest.mark.asyncio
+        async def test_something(init_http_pool):
+            # HTTP clients are ready to use
+            client = get_alpaca_client()
+            ...
+    """
+    from backend.http_pool import init_http_clients, close_http_clients
+
+    # Initialize clients before test
+    await init_http_clients()
+
+    yield
+
+    # Cleanup clients after test
+    await close_http_clients()
 
 
 # ==================== Async Mock Fixtures ====================
@@ -351,26 +378,3 @@ def async_raise():
     """
     from tests.fixtures.test_helpers import async_raise
     return async_raise
-
-
-# ==================== Database Pool Fixtures ====================
-
-@pytest.fixture(scope="function")
-async def db_pool():
-    """Initialize database connection pool for testing.
-
-    This fixture initializes the database pool before each test and closes
-    it after the test completes. Ensures proper cleanup of connections.
-
-    Yields:
-        None (pool is accessible via get_pool() after initialization)
-    """
-    from backend.db.pool import init_pool, close_pool
-
-    # Initialize the pool
-    await init_pool()
-
-    yield
-
-    # Close the pool after test
-    await close_pool()
