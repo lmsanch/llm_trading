@@ -1,5 +1,6 @@
 """Trade service for trade execution business logic."""
 
+import asyncio
 import logging
 from typing import Dict, List, Optional, Any
 
@@ -28,6 +29,42 @@ class TradeService:
     def __init__(self):
         """Initialize the TradeService."""
         pass
+
+    def _is_retryable_error(self, error: Exception) -> bool:
+        """
+        Determine if an order error should be retried.
+
+        Non-retryable errors include:
+        - Insufficient buying power
+        - Invalid symbol
+        - Account-level issues
+
+        Args:
+            error: The exception that occurred
+
+        Returns:
+            True if the error is retryable, False otherwise
+        """
+        error_msg = str(error).lower()
+
+        # Non-retryable error patterns
+        non_retryable_patterns = [
+            "insufficient buying power",
+            "insufficient funds",
+            "buying power",
+            "invalid symbol",
+            "symbol not found",
+            "symbol is not tradable",
+            "account",
+            "forbidden",
+            "unauthorized",
+        ]
+
+        for pattern in non_retryable_patterns:
+            if pattern in error_msg:
+                return False
+
+        return True
 
     def get_pending_trades(self, pipeline_state: Any = None) -> List[Dict[str, Any]]:
         """
@@ -173,119 +210,198 @@ class TradeService:
                     )
                     continue
 
-                try:
-                    # Create bracket order
-                    order_result = create_bracket_order_from_pitch(
-                        alpaca_account, pitch
-                    )
+                # Retry logic: attempt once, then retry after 5 seconds
+                max_attempts = 2
+                order_result = None
+                last_error = None
 
-                    if order_result:
-                        logger.info(
-                            f"Bracket order submitted for trade {trade_id}: "
-                            f"order_id={order_result.get('order_id')}, "
-                            f"symbol={order_result.get('symbol')}, "
-                            f"side={order_result.get('side')}, "
-                            f"qty={order_result.get('qty')}"
+                for attempt in range(max_attempts):
+                    try:
+                        # Create bracket order
+                        order_result = create_bracket_order_from_pitch(
+                            alpaca_account, pitch
                         )
 
-                        # Log order_placed event
-                        week_id = pitch.get("week_id", "unknown")
-                        await log_execution_event(
-                            week_id=week_id,
-                            event_type="order_placed",
-                            account=account_name,
-                            event_data={
-                                "trade_id": trade_id,
-                                "symbol": order_result.get("symbol"),
-                                "side": order_result.get("side"),
-                                "qty": order_result.get("qty"),
-                                "order_id": order_result.get("order_id"),
-                                "limit_price": order_result.get("limit_price"),
-                                "take_profit_price": order_result.get("take_profit_price"),
-                                "stop_loss_price": order_result.get("stop_loss_price"),
-                            }
+                        if order_result:
+                            logger.info(
+                                f"Bracket order submitted for trade {trade_id} "
+                                f"(attempt {attempt + 1}/{max_attempts}): "
+                                f"order_id={order_result.get('order_id')}, "
+                                f"symbol={order_result.get('symbol')}, "
+                                f"side={order_result.get('side')}, "
+                                f"qty={order_result.get('qty')}"
+                            )
+
+                            # Log order_placed event
+                            week_id = pitch.get("week_id", "unknown")
+                            await log_execution_event(
+                                week_id=week_id,
+                                event_type="order_placed",
+                                account=account_name,
+                                event_data={
+                                    "trade_id": trade_id,
+                                    "symbol": order_result.get("symbol"),
+                                    "side": order_result.get("side"),
+                                    "qty": order_result.get("qty"),
+                                    "order_id": order_result.get("order_id"),
+                                    "limit_price": order_result.get("limit_price"),
+                                    "take_profit_price": order_result.get("take_profit_price"),
+                                    "stop_loss_price": order_result.get("stop_loss_price"),
+                                    "attempt": attempt + 1,
+                                }
+                            )
+
+                            results.append(
+                                {
+                                    "trade_id": trade_id,
+                                    "status": "submitted",
+                                    "order_id": order_result.get("order_id"),
+                                    "symbol": order_result.get("symbol"),
+                                    "side": order_result.get("side"),
+                                    "qty": order_result.get("qty"),
+                                    "limit_price": order_result.get("limit_price"),
+                                    "take_profit_price": order_result.get(
+                                        "take_profit_price"
+                                    ),
+                                    "stop_loss_price": order_result.get("stop_loss_price"),
+                                    "message": f"Bracket order submitted for {account_name}",
+                                }
+                            )
+
+                            # Update pipeline state
+                            if pipeline_state and hasattr(pipeline_state, 'pending_trades'):
+                                for trade in pipeline_state.pending_trades:
+                                    if trade.get("id") == trade_id:
+                                        trade["status"] = "filled"
+                                        trade["order_id"] = order_result.get("order_id")
+
+                                        # Add to executed trades
+                                        if not hasattr(pipeline_state, 'executed_trades'):
+                                            pipeline_state.executed_trades = []
+                                        pipeline_state.executed_trades.append(trade)
+                                        break
+
+                            # Success - break retry loop
+                            break
+
+                        else:
+                            # Order creation returned None - treat as error
+                            last_error = Exception("Failed to create bracket order")
+                            logger.warning(
+                                f"Failed to create bracket order for trade {trade_id} "
+                                f"(attempt {attempt + 1}/{max_attempts})"
+                            )
+
+                            # Check if we should retry
+                            if attempt < max_attempts - 1:
+                                # Log retry event
+                                week_id = pitch.get("week_id", "unknown")
+                                await log_execution_event(
+                                    week_id=week_id,
+                                    event_type="order_retried",
+                                    account=account_name,
+                                    event_data={
+                                        "trade_id": trade_id,
+                                        "symbol": pitch.get("symbol"),
+                                        "direction": pitch.get("direction"),
+                                        "attempt": attempt + 1,
+                                        "error": "Failed to create bracket order",
+                                    }
+                                )
+                                logger.info(f"Retrying trade {trade_id} in 5 seconds...")
+                                await asyncio.sleep(5)
+                            else:
+                                # Final failure - log order_failed event
+                                week_id = pitch.get("week_id", "unknown")
+                                await log_execution_event(
+                                    week_id=week_id,
+                                    event_type="order_failed",
+                                    account=account_name,
+                                    event_data={
+                                        "trade_id": trade_id,
+                                        "symbol": pitch.get("symbol"),
+                                        "direction": pitch.get("direction"),
+                                        "error": "Failed to create bracket order",
+                                        "attempts": max_attempts,
+                                    }
+                                )
+
+                    except Exception as e:
+                        last_error = e
+                        logger.warning(
+                            f"Order submission failed for trade {trade_id} "
+                            f"(attempt {attempt + 1}/{max_attempts}): {e}",
+                            exc_info=(attempt == max_attempts - 1),  # Full trace on final attempt
                         )
 
-                        results.append(
-                            {
-                                "trade_id": trade_id,
-                                "status": "submitted",
-                                "order_id": order_result.get("order_id"),
-                                "symbol": order_result.get("symbol"),
-                                "side": order_result.get("side"),
-                                "qty": order_result.get("qty"),
-                                "limit_price": order_result.get("limit_price"),
-                                "take_profit_price": order_result.get(
-                                    "take_profit_price"
-                                ),
-                                "stop_loss_price": order_result.get("stop_loss_price"),
-                                "message": f"Bracket order submitted for {account_name}",
-                            }
-                        )
+                        # Check if error is retryable
+                        is_retryable = self._is_retryable_error(e)
 
-                        # Update pipeline state
-                        if pipeline_state and hasattr(pipeline_state, 'pending_trades'):
-                            for trade in pipeline_state.pending_trades:
-                                if trade.get("id") == trade_id:
-                                    trade["status"] = "filled"
-                                    trade["order_id"] = order_result.get("order_id")
+                        if not is_retryable:
+                            logger.error(
+                                f"Non-retryable error for trade {trade_id}: {e}"
+                            )
+                            # Log order_failed event immediately
+                            week_id = pitch.get("week_id", "unknown")
+                            await log_execution_event(
+                                week_id=week_id,
+                                event_type="order_failed",
+                                account=account_name,
+                                event_data={
+                                    "trade_id": trade_id,
+                                    "symbol": pitch.get("symbol"),
+                                    "direction": pitch.get("direction"),
+                                    "error": str(e),
+                                    "error_type": type(e).__name__,
+                                    "retryable": False,
+                                }
+                            )
+                            break
 
-                                    # Add to executed trades
-                                    if not hasattr(pipeline_state, 'executed_trades'):
-                                        pipeline_state.executed_trades = []
-                                    pipeline_state.executed_trades.append(trade)
-                                    break
-                    else:
-                        logger.error(f"Failed to create bracket order for trade {trade_id}")
+                        # Retryable error - retry if attempts remain
+                        if attempt < max_attempts - 1:
+                            # Log retry event
+                            week_id = pitch.get("week_id", "unknown")
+                            await log_execution_event(
+                                week_id=week_id,
+                                event_type="order_retried",
+                                account=account_name,
+                                event_data={
+                                    "trade_id": trade_id,
+                                    "symbol": pitch.get("symbol"),
+                                    "direction": pitch.get("direction"),
+                                    "attempt": attempt + 1,
+                                    "error": str(e),
+                                    "error_type": type(e).__name__,
+                                }
+                            )
+                            logger.info(f"Retrying trade {trade_id} in 5 seconds...")
+                            await asyncio.sleep(5)
+                        else:
+                            # Final failure - log order_failed event
+                            week_id = pitch.get("week_id", "unknown")
+                            await log_execution_event(
+                                week_id=week_id,
+                                event_type="order_failed",
+                                account=account_name,
+                                event_data={
+                                    "trade_id": trade_id,
+                                    "symbol": pitch.get("symbol"),
+                                    "direction": pitch.get("direction"),
+                                    "error": str(e),
+                                    "error_type": type(e).__name__,
+                                    "attempts": max_attempts,
+                                }
+                            )
 
-                        # Log order_failed event
-                        week_id = pitch.get("week_id", "unknown")
-                        await log_execution_event(
-                            week_id=week_id,
-                            event_type="order_failed",
-                            account=account_name,
-                            event_data={
-                                "trade_id": trade_id,
-                                "symbol": pitch.get("symbol"),
-                                "direction": pitch.get("direction"),
-                                "error": "Failed to create bracket order",
-                            }
-                        )
-
-                        results.append(
-                            {
-                                "trade_id": trade_id,
-                                "status": "error",
-                                "message": "Failed to create bracket order",
-                            }
-                        )
-
-                except Exception as e:
-                    logger.error(
-                        f"Order submission failed for trade {trade_id}: {e}",
-                        exc_info=True,
-                    )
-
-                    # Log order_failed event
-                    week_id = pitch.get("week_id", "unknown")
-                    await log_execution_event(
-                        week_id=week_id,
-                        event_type="order_failed",
-                        account=account_name,
-                        event_data={
-                            "trade_id": trade_id,
-                            "symbol": pitch.get("symbol"),
-                            "direction": pitch.get("direction"),
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                        }
-                    )
-
+                # If no successful order after all retries, add error to results
+                if not order_result:
+                    error_msg = str(last_error) if last_error else "Failed to create bracket order"
                     results.append(
                         {
                             "trade_id": trade_id,
                             "status": "error",
-                            "message": f"Order submission failed: {str(e)}",
+                            "message": f"Order submission failed: {error_msg}",
                         }
                     )
 
