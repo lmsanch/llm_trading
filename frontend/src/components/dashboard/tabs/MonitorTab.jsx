@@ -5,6 +5,7 @@ import { Button } from "../ui/Button";
 import { Play, History, RefreshCw, TrendingUp, Wallet, Clock } from 'lucide-react';
 import { tradingApi } from '../../../api/trading';
 import { cn } from "../../../lib/utils";
+import PerformanceChart from './PerformanceChart';
 
 export default function MonitorTab() {
   const [loadingAccounts, setLoadingAccounts] = useState(true);
@@ -139,6 +140,9 @@ export default function MonitorTab() {
           ))
         )}
       </div>
+
+      {/* Performance Chart */}
+      <PerformanceChart />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Positions Table */}
