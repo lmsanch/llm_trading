@@ -304,7 +304,9 @@ Be fair but critical. Identify weaknesses and suggest improvements.""",
 
 ### OUTPUT FORMAT:
 
-For each pitch, return as valid JSON:
+Return as JSON array: [{{review for Pitch A}}, {{review for Pitch B}}, ...]
+
+Each review object should have this structure:
 
 {{
   "review_id": "uuid",
@@ -315,7 +317,7 @@ For each pitch, return as valid JSON:
     "edge_plausibility": 7,
     "timing_catalyst": 6,
     "risk_definition": 9,
-    "indicator_integrity": 8,
+    "risk_management": 8,
     "originality": 5,
     "tradeability": 7
   }},
@@ -327,6 +329,7 @@ For each pitch, return as valid JSON:
 
 IMPORTANT:
 - Review ALL pitches (don't skip any)
+- Return a JSON ARRAY of review objects, one per pitch
 - Be fair and objective
 - Provide specific, actionable feedback
 - Return as valid JSON only, no markdown"""
