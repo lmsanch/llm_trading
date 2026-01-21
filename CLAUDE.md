@@ -570,14 +570,14 @@ python cli.py summary --week 2025-01-08
 
 ## Paper Trading Accounts
 
-| Account | Strategy | Model |
-|---------|----------|-------|
-| Acct 1 | Individual PM | GPT-5.1 |
-| Acct 2 | Individual PM | Gemini 3 Pro |
-| Acct 3 | Individual PM | Sonnet 4.5 |
-| Acct 4 | Individual PM | Grok |
-| Acct 5 | Council | Chairman synthesis |
-| Acct 6 | Baseline | FLAT (no trades) |
+| Account | Strategy | Model/Description |
+|---------|----------|-------------------|
+| CHATGPT | Individual PM | GPT-5.1 |
+| GEMINI | Individual PM | Gemini 3 Pro |
+| CLAUDE | Individual PM | Sonnet 4.5 |
+| GROQ | Individual PM | Groq |
+| DEEPSEEK | Individual PM | Deepseek |
+| COUNCIL | Council Synthesis | Chairman's synthesized decisions |
 
 ### Metrics Tracked
 
