@@ -3,23 +3,55 @@ import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Play, History, RefreshCw, TrendingUp, Wallet, Clock } from 'lucide-react';
-import { mockPositions, mockAccounts } from '../../../lib/mockData';
+import { tradingApi } from '../../../api/trading';
 import { cn } from "../../../lib/utils";
 
 export default function MonitorTab() {
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [loadingPositions, setLoadingPositions] = useState(true);
+  const [accounts, setAccounts] = useState([]);
+  const [positions, setPositions] = useState([]);
+  const [error, setError] = useState(null);
+
+  const fetchAccounts = async () => {
+    try {
+      setLoadingAccounts(true);
+      setError(null);
+      const data = await tradingApi.getAccounts();
+      setAccounts(data);
+    } catch (err) {
+      setError('Failed to load accounts');
+      console.error('Error fetching accounts:', err);
+    } finally {
+      setLoadingAccounts(false);
+    }
+  };
+
+  const fetchPositions = async () => {
+    try {
+      setLoadingPositions(true);
+      setError(null);
+      const data = await tradingApi.getPositions();
+      setPositions(data);
+    } catch (err) {
+      setError('Failed to load positions');
+      console.error('Error fetching positions:', err);
+    } finally {
+      setLoadingPositions(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    fetchAccounts();
+    fetchPositions();
+  };
 
   useEffect(() => {
-    // Simulate loading accounts
-    const timer = setTimeout(() => setLoadingAccounts(false), 1500);
-    return () => clearTimeout(timer);
+    fetchAccounts();
   }, []);
 
   useEffect(() => {
-    // Simulate loading positions
-    const timer = setTimeout(() => setLoadingPositions(false), 1800);
-    return () => clearTimeout(timer);
+    fetchPositions();
   }, []);
 
   return (
@@ -29,7 +61,7 @@ export default function MonitorTab() {
                 <h2 className="text-2xl font-bold tracking-tight">Portfolio Monitor</h2>
                 <p className="text-muted-foreground">Live positions and account health.</p>
             </div>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleRefresh}>
                 <RefreshCw className="mr-2 h-4 w-4" /> Refresh Data
             </Button>
         </div>
@@ -52,7 +84,7 @@ export default function MonitorTab() {
           ))
         ) : (
           // Real account cards
-          mockAccounts.map((acc, i) => (
+          accounts.map((acc, i) => (
             <Card key={i}>
                 <CardContent className="pt-6">
                     <div className="flex justify-between items-start mb-2">
@@ -102,7 +134,7 @@ export default function MonitorTab() {
                   ))
                 ) : (
                   <>
-                    {mockPositions.map((pos, i) => (
+                    {positions.map((pos, i) => (
                       <div key={i} className="grid grid-cols-6 gap-4 p-3 text-sm items-center hover:bg-muted/10 transition-colors border-b last:border-0">
                           <div className="font-medium text-muted-foreground">{pos.account}</div>
                           <div className="font-bold">{pos.symbol}</div>
@@ -114,7 +146,7 @@ export default function MonitorTab() {
                           </div>
                       </div>
                     ))}
-                    {mockPositions.length === 0 && (
+                    {positions.length === 0 && (
                       <div className="text-center py-8 text-muted-foreground">No active positions.</div>
                     )}
                   </>
