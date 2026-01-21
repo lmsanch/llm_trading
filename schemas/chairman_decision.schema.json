@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://llm-trading.local/schemas/chairman_decision.schema.json",
+  "title": "Chairman Decision Schema",
+  "description": "Chairman (CIO) synthesis of all pitches and peer reviews into a final trade decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision_id",
+    "week_id",
+    "selected_trade",
+    "conviction",
+    "rationale",
+    "monitoring_plan",
+    "model",
+    "model_id",
+    "account",
+    "alpaca_id",
+    "timestamp"
+  ],
+  "properties": {
+    "decision_id": {
+      "type": "string",
+      "description": "Unique identifier for this decision (UUID format)",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "week_id": {
+      "type": "string",
+      "description": "Week identifier in YYYY-MM-DD format (Monday of the week)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "selected_trade": {
+      "type": "object",
+      "description": "Final trade decision selected by chairman",
+      "additionalProperties": false,
+      "required": ["instrument", "direction", "horizon"],
+      "properties": {
+        "instrument": {
+          "type": "string",
+          "description": "ETF ticker symbol from approved instrument list",
+          "pattern": "^(SPY|QQQ|IWM|TLT|HYG|UUP|GLD|USO|VIXY|SH)$"
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["LONG", "SHORT", "FLAT"],
+          "description": "Trade direction: LONG (bullish), SHORT (bearish), or FLAT (no trade)"
+        },
+        "horizon": {
+          "type": "string",
+          "enum": ["1d", "3d", "1w"],
+          "description": "Trade horizon: 1d (one day), 3d (three days), or 1w (one week)"
+        }
+      }
+    },
+    "conviction": {
+      "type": "number",
+      "description": "Conviction score from -2 (strong short) to +2 (strong long), 0 = neutral/FLAT",
+      "minimum": -2,
+      "maximum": 2
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Detailed rationale explaining the chairman's decision and key factors",
+      "minLength": 10
+    },
+    "dissent_summary": {
+      "type": "array",
+      "description": "Summary of minority views that disagreed with the final decision",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "pitch_id": {
+            "type": "string",
+            "description": "ID of the dissenting pitch"
+          },
+          "model": {
+            "type": "string",
+            "description": "Model that made the dissenting pitch"
+          },
+          "key_concern": {
+            "type": "string",
+            "description": "Main concern or disagreement point"
+          }
+        }
+      },
+      "default": []
+    },
+    "monitoring_plan": {
+      "type": "object",
+      "description": "Plan for monitoring the position and conditions that would trigger review",
+      "additionalProperties": false,
+      "required": ["checkpoints", "invalidation_triggers"],
+      "properties": {
+        "checkpoints": {
+          "type": "array",
+          "description": "Scheduled times to review position (e.g., daily checkpoints)",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "invalidation_triggers": {
+          "type": "array",
+          "description": "Conditions that would invalidate the thesis and trigger exit",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "key_indicators": {
+          "type": "array",
+          "description": "Key indicators to monitor during position lifetime",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      }
+    },
+    "model": {
+      "type": "string",
+      "description": "Model name/identifier (e.g., 'chairman')",
+      "minLength": 1
+    },
+    "model_id": {
+      "type": "string",
+      "description": "OpenRouter model ID used for chairman synthesis",
+      "minLength": 1
+    },
+    "account": {
+      "type": "string",
+      "description": "Associated trading account identifier",
+      "minLength": 1
+    },
+    "alpaca_id": {
+      "type": "string",
+      "description": "Alpaca account ID for paper trading",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "ISO8601 timestamp when decision was made",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?$"
+    }
+  }
+}

@@ -4,6 +4,8 @@ import json
 import re
 from typing import Dict, Any, List
 from datetime import datetime
+import jsonschema
+from pathlib import Path
 
 from ...requesty_client import query_chairman, REQUESTY_MODELS
 from ..context import PipelineContext, ContextKey
@@ -46,6 +48,13 @@ class ChairmanStage(Stage):
         self.temperature = temperature or TemperatureManager().get_temperature(
             "chairman"
         )
+        self._schema = self._load_schema()
+
+    def _load_schema(self) -> Dict[str, Any]:
+        """Load the chairman decision JSON schema."""
+        schema_path = Path(__file__).parent.parent.parent.parent / "schemas" / "chairman_decision.schema.json"
+        with open(schema_path, "r") as f:
+            return json.load(f)
 
     async def execute(self, context: PipelineContext) -> PipelineContext:
         """
@@ -293,6 +302,25 @@ Return as valid JSON only, no markdown formatting."""
         try:
             decision = json.loads(json_str)
 
+            # Add metadata before validation
+            decision["model"] = "chairman"
+            decision["model_id"] = REQUESTY_MODELS["chairman"]["model_id"]
+            decision["account"] = REQUESTY_MODELS["chairman"]["account"]
+            decision["alpaca_id"] = REQUESTY_MODELS["chairman"]["alpaca_id"]
+            decision["timestamp"] = datetime.utcnow().isoformat()
+
+            # Validate against JSON schema
+            try:
+                jsonschema.validate(instance=decision, schema=self._schema)
+            except jsonschema.ValidationError as ve:
+                print(f"  ⚠️  Schema validation error: {ve.message}")
+                print(f"     Failed at path: {' -> '.join(str(p) for p in ve.path)}")
+                return self._fallback_decision([])
+            except jsonschema.SchemaError as se:
+                print(f"  ⚠️  Schema error: {se.message}")
+                return self._fallback_decision([])
+
+            # Additional runtime validations (backwards compatibility)
             # Validate required fields
             required_fields = [
                 "decision_id",
@@ -336,13 +364,6 @@ Return as valid JSON only, no markdown formatting."""
             if not monitoring:
                 print(f"  ⚠️  Missing monitoring plan")
                 return self._fallback_decision([])
-
-            # Add metadata
-            decision["model"] = "chairman"
-            decision["model_id"] = REQUESTY_MODELS["chairman"]["model_id"]
-            decision["account"] = REQUESTY_MODELS["chairman"]["account"]
-            decision["alpaca_id"] = REQUESTY_MODELS["chairman"]["alpaca_id"]
-            decision["timestamp"] = datetime.utcnow().isoformat()
 
             return decision
 
