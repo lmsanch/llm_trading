@@ -12,6 +12,7 @@ export default function MonitorTab() {
   const [accounts, setAccounts] = useState([]);
   const [positions, setPositions] = useState([]);
   const [error, setError] = useState(null);
+  const [lastRefreshTime, setLastRefreshTime] = useState(null);
 
   const fetchAccounts = async () => {
     try {
@@ -44,25 +45,59 @@ export default function MonitorTab() {
   const handleRefresh = () => {
     fetchAccounts();
     fetchPositions();
+    setLastRefreshTime(new Date());
   };
 
+  // Initial data fetch
   useEffect(() => {
     fetchAccounts();
+    fetchPositions();
+    setLastRefreshTime(new Date());
   }, []);
 
+  // Auto-refresh every 30 seconds
   useEffect(() => {
-    fetchPositions();
+    const interval = setInterval(() => {
+      handleRefresh();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
   }, []);
+
+  // Format last refresh time
+  const formatLastRefresh = () => {
+    if (!lastRefreshTime) return 'Never';
+    const now = new Date();
+    const diffSeconds = Math.floor((now - lastRefreshTime) / 1000);
+    if (diffSeconds < 60) return `${diffSeconds}s ago`;
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    return `${diffMinutes}m ago`;
+  };
+
+  const isRefreshing = loadingAccounts || loadingPositions;
 
   return (
     <div className="space-y-6">
        <div className="flex justify-between items-center">
             <div>
                 <h2 className="text-2xl font-bold tracking-tight">Portfolio Monitor</h2>
-                <p className="text-muted-foreground">Live positions and account health.</p>
+                <p className="text-muted-foreground">
+                  Live positions and account health.
+                  <span className="ml-2 text-xs">
+                    <Badge variant="outline" className="ml-2">
+                      Auto-refresh: ON
+                    </Badge>
+                    {lastRefreshTime && (
+                      <span className="ml-2 text-muted-foreground">
+                        Last updated: {formatLastRefresh()}
+                      </span>
+                    )}
+                  </span>
+                </p>
             </div>
-            <Button variant="outline" onClick={handleRefresh}>
-                <RefreshCw className="mr-2 h-4 w-4" /> Refresh Data
+            <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
+                <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
+                {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
             </Button>
         </div>
 
