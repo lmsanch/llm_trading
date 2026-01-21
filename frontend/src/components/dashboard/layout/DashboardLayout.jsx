@@ -6,6 +6,7 @@ import PMsTab from '../tabs/PMsTab';
 import CouncilTab from '../tabs/CouncilTab';
 import TradesTab from '../tabs/TradesTab';
 import MonitorTab from '../tabs/MonitorTab';
+import LeaderboardTab from '../tabs/LeaderboardTab';
 import SettingsTab from '../tabs/SettingsTab';
 
 export function DashboardLayout() {
@@ -18,6 +19,7 @@ export function DashboardLayout() {
     { id: 'council', label: 'Council' },
     { id: 'trades', label: 'Trades' },
     { id: 'monitor', label: 'Monitor' },
+    { id: 'leaderboard', label: 'Leaderboard' },
     { id: 'settings', label: 'Settings' },
   ];
 
@@ -50,6 +52,7 @@ export function DashboardLayout() {
         {activeTab === 'council' && <CouncilTab />}
         {activeTab === 'trades' && <TradesTab />}
         {activeTab === 'monitor' && <MonitorTab />}
+        {activeTab === 'leaderboard' && <LeaderboardTab />}
         {activeTab === 'settings' && <SettingsTab />}
       </main>
     </div>
