@@ -1,0 +1,109 @@
+{
+  "total_reviews": 5,
+  "expected_reviews": 12,
+  "bug_confirmed": true,
+  "reviews_by_reviewer": {
+    "gpt-4.1-trader": 1,
+    "Expert_Trader_Bot": 1,
+    "ExpertTraderAI": 1,
+    "claude-3-7-sonnet-20250219": 1,
+    "model_name": 1
+  },
+  "reviews": [
+    {
+      "review_id": "a1b9b6de-9f9b-4a2a-8b3e-0f0e45a6e0a1",
+      "pitch_label": "Pitch A",
+      "reviewer_model": "gpt-4.1-trader",
+      "scores": {
+        "clarity": 6,
+        "edge_plausibility": 6,
+        "timing_catalyst": 4,
+        "risk_definition": 6,
+        "risk_management": 6,
+        "originality": 3,
+        "tradeability": 9
+      },
+      "best_argument_against": "The thesis is essentially a consensus momentum trade on SPY with no differentiated insight: Fed pause and a breakout above a round number are widely known and likely priced. In a 1-week horizon, macro like a \"Fed pause\" has limited incremental impact versus day-to-day flows, earnings headlines, and positioning. Moreover, at all-time/high levels, risk-reward for chasing a breakout may be poor if market makers fade breakouts or if options positioning (e.g., gamma exposure) drives mean reversion instead. A 2% stop vs 5% target may not align with SPY\u2019s typical weekly volatility: a minor intraday pullback could stop the trade before the thesis is invalid, while a 5% move in one week is relatively rare absent a major catalyst.",
+      "one_flip_condition": "Would flip to SHORT if SPY fails to hold above 500 with a clear rejection (multiple closes back below the breakout level accompanied by rising realized volatility and worsening market breadth), suggesting a bull trap rather than a sustained breakout.",
+      "suggested_fix": "Specify concrete, time-relevant catalysts and market structure elements: e.g., tie the 1-week horizon to upcoming events (key macro data, Fed speakers, major earnings) and add confirmation triggers such as breadth improvements, put/call positioning, or volatility term structure that indicate genuine risk-on momentum rather than a late-stage breakout. Also justify the 2%/5% levels with reference to recent SPY ATR or realized volatility so that risk parameters match the timeframe and typical move size.",
+      "average_score": 5.71,
+      "timestamp": "2026-01-21T02:02:31.439243"
+    },
+    {
+      "review_id": "rev_001",
+      "pitch_label": "Pitch A",
+      "reviewer_model": "Expert_Trader_Bot",
+      "scores": {
+        "clarity": 6,
+        "edge_plausibility": 4,
+        "timing_catalyst": 5,
+        "risk_definition": 5,
+        "risk_management": 3,
+        "originality": 2,
+        "tradeability": 9
+      },
+      "best_argument_against": "A 5.0% take-profit target on SPY over a 1-week horizon implies an annualized return of over 1000% or a massive volatility event, which contradicts the 'Fed pause' (stability) thesis. The risk/reward ratio is mathematically attractive but probabilistically unrealistic.",
+      "one_flip_condition": "A hot CPI print or hawkish Fed commentary explicitly ruling out a pause.",
+      "suggested_fix": "Adjust the Take Profit to a realistic 1-week move (e.g., 1.5% - 2.0%) or extend the time horizon to 1 month to match the target magnitude.",
+      "timestamp": "2026-01-21T02:02:31.439418",
+      "average_score": 4.86
+    },
+    {
+      "review_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "pitch_label": "Pitch A",
+      "reviewer_model": "ExpertTraderAI",
+      "scores": {
+        "clarity": 7,
+        "edge_plausibility": 6,
+        "timing_catalyst": 5,
+        "risk_definition": 7,
+        "risk_management": 8,
+        "originality": 3,
+        "tradeability": 10
+      },
+      "best_argument_against": "Recent economic data shows persistent inflation, which could prompt the Fed to extend hikes rather than pause, undermining the momentum and breakout thesis.",
+      "one_flip_condition": "Would flip to SHORT if the Fed issues a hawkish surprise in upcoming minutes or statements indicating continued tightening.",
+      "suggested_fix": "Bolster the thesis with specific recent data points supporting the Fed pause, such as cooling labor market indicators, to enhance plausibility.",
+      "timestamp": "2026-01-21T02:02:31.439553",
+      "average_score": 6.57
+    },
+    {
+      "review_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "pitch_label": "Pitch A",
+      "reviewer_model": "claude-3-7-sonnet-20250219",
+      "scores": {
+        "clarity": 6,
+        "edge_plausibility": 4,
+        "timing_catalyst": 3,
+        "risk_definition": 7,
+        "risk_management": 6,
+        "originality": 2,
+        "tradeability": 8
+      },
+      "best_argument_against": "The thesis relies on generic momentum and technical levels without identifying a specific catalyst. The 'Fed pause likely' assumption contradicts Pitch B's view of continued hiking, suggesting no clear informational edge. With 1.5 conviction and 2.5:1 reward-risk ratio, this appears to be momentum chasing rather than edge-driven trading. SPY at 500+ may already price in positive scenarios.",
+      "one_flip_condition": "Would flip to SHORT if Fed signals additional rate hikes beyond market expectations or if SPY fails to hold 500 on increased volume, indicating false breakout.",
+      "suggested_fix": "Identify a specific catalyst within the 1-week horizon (e.g., earnings beats, economic data release, technical confirmation pattern). The 'Fed pause likely' needs supporting evidence - specify which Fed speakers, meeting minutes, or data points support this view versus the consensus.",
+      "timestamp": "2026-01-21T02:02:31.439684",
+      "average_score": 5.14
+    },
+    {
+      "review_id": "f4e5d6c7-b8a9-4f1e-9d2c-3b4a5c6d7e8f",
+      "pitch_label": "Pitch A",
+      "reviewer_model": "model_name",
+      "scores": {
+        "clarity": 8,
+        "edge_plausibility": 7,
+        "timing_catalyst": 6,
+        "risk_definition": 9,
+        "risk_management": 8,
+        "originality": 5,
+        "tradeability": 7
+      },
+      "best_argument_against": "The Fed could surprise with a hawkish tone, reversing the momentum and technical breakout.",
+      "one_flip_condition": "Would flip to SHORT if the Fed unexpectedly signals further rate hikes.",
+      "suggested_fix": "Improve by adding more specific catalysts or data points to support the Fed pause thesis.",
+      "timestamp": "2026-01-21T02:02:31.439781",
+      "average_score": 7.14
+    }
+  ]
+}
