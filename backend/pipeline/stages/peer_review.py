@@ -177,13 +177,15 @@ Be fair but critical. Identify weaknesses and suggest improvements.""",
         peer_reviews = []
         for model_key, response in responses.items():
             if response is not None:
-                review = self._parse_peer_review(response["content"], model_key)
-                if review:
-                    peer_reviews.append(review)
+                reviews = self._parse_peer_review(response["content"], model_key)
+                if reviews:
+                    peer_reviews.extend(reviews)
                     model_info = REQUESTY_MODELS[model_key]
                     print(f"\n✅ {model_info['account']} ({model_key.upper()})")
-                    print(f"   Reviewed {len(review['scores'])} pitches")
-                    print(f"   Average score: {review.get('average_score', 0):.2f}/10")
+                    print(f"   Reviewed {len(reviews)} pitches")
+                    # Calculate average score across all reviews
+                    avg_score = sum(r.get('average_score', 0) for r in reviews) / len(reviews)
+                    print(f"   Average score: {avg_score:.2f}/10")
                 else:
                     model_info = REQUESTY_MODELS[model_key]
                     print(
@@ -333,7 +335,7 @@ IMPORTANT:
 
     def _parse_peer_review(
         self, content: str, reviewer_model: str
-    ) -> Dict[str, Any] | None:
+    ) -> List[Dict[str, Any]]:
         """
         Parse peer review from LLM response.
 
@@ -342,7 +344,7 @@ IMPORTANT:
             reviewer_model: Model identifier
 
         Returns:
-            Parsed review dict or None if invalid
+            List of parsed review dicts (empty list if invalid)
         """
         import json
         import uuid
@@ -419,18 +421,41 @@ IMPORTANT:
                 # endregion
             except JSONDecodeError as e:
                 print(f"  ⚠️  JSON decode error: {e}")
-                return None
+                return []
 
         if review is None:
             print(f"  ⚠️  No JSON found in review from {reviewer_model}")
-            return None
+            return []
 
-        # If model returned a list of reviews, take the first element
+        # If model returned a list of reviews, validate and return all
         if isinstance(review, list):
             if not review:
                 print(f"  ⚠️  Empty review list from {reviewer_model}")
-                return None
-            review = review[0]
+                return []
+            reviews_to_return = []
+            for single_review in review:
+                validated = self._validate_and_enrich_review(single_review, reviewer_model)
+                if validated:
+                    reviews_to_return.append(validated)
+            return reviews_to_return
+
+        # Single review - validate and return as list
+        validated = self._validate_and_enrich_review(review, reviewer_model)
+        return [validated] if validated else []
+
+    def _validate_and_enrich_review(
+        self, review: Dict[str, Any], reviewer_model: str
+    ) -> Dict[str, Any] | None:
+        """
+        Validate and enrich a single review dict.
+
+        Args:
+            review: Review dict to validate
+            reviewer_model: Model identifier
+
+        Returns:
+            Validated and enriched review dict or None if invalid
+        """
 
         # Validate required fields
         required_fields = [
