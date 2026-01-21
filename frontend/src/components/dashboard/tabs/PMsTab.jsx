@@ -411,6 +411,7 @@ export default function PMsTab() {
   });
   const [loadingPitches, setLoadingPitches] = useState(true);
   const [pollingInterval, setPollingInterval] = useState(null);
+  const [sendingToCouncil, setSendingToCouncil] = useState(false);
 
   // Load research history and market metrics on mount
   useEffect(() => {
@@ -780,6 +781,7 @@ export default function PMsTab() {
 
   const handlePassToCouncil = async () => {
     try {
+      setSendingToCouncil(true);
       console.log('🏛️ Passing to Council...');
       const response = await fetch('/api/council/synthesize', {
         method: 'POST',
@@ -798,6 +800,8 @@ export default function PMsTab() {
     } catch (error) {
       console.error('❌ Error starting council synthesis:', error);
       alert('Failed to start council synthesis. Check console for details.');
+    } finally {
+      setSendingToCouncil(false);
     }
   };
 
@@ -1089,9 +1093,18 @@ export default function PMsTab() {
           <Button
             onClick={handlePassToCouncil}
             className="bg-blue-600 hover:bg-blue-700"
-            disabled={pitches.length < 5 || pitches.some(p => !p || p.status === 'error')}
+            disabled={sendingToCouncil || pitches.length < 5 || pitches.some(p => !p || p.status === 'error')}
           >
-            <Send className="mr-2 h-4 w-4" /> Send to Council
+            {sendingToCouncil ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Sending...
+              </>
+            ) : (
+              <>
+                <Send className="mr-2 h-4 w-4" /> Send to Council
+              </>
+            )}
           </Button>
         </div>
       </Card>
