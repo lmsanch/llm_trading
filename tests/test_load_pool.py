@@ -53,7 +53,7 @@ STRESS_REQUESTS = 200  # Number of requests for stress test (exceeds pool size)
 # ============================================================================
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="function")
 async def load_test_pool():
     """Initialize pool for load testing."""
     try:
@@ -65,7 +65,7 @@ async def load_test_pool():
         await close_pool()
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="function")
 async def load_test_table(load_test_pool):
     """Create test table for load testing."""
     pool = get_pool()

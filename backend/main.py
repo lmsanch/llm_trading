@@ -4,8 +4,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.pipeline.stages.research import get_week_id
 from backend.config import get_cors_origins
-from backend.redis_client import get_redis_client, close_redis_client
+from backend.redis_client import init_redis_pool, get_redis_pool, close_redis_pool, close_redis_client
 from backend.db.pool import init_pool, close_pool, check_pool_health
+from backend.cache import cached
+import time
+from datetime import datetime
 
 
 class PipelineState:
@@ -76,10 +79,11 @@ async def startup_event():
         print(f"✗ Database pool initialization failed: {e}")
         print("  Application will continue but database operations may fail")
 
-    # Initialize Redis client
+    # Initialize Redis connection pool
     try:
-        redis_client = get_redis_client()
-        if redis_client.ping():
+        await init_redis_pool()
+        pool = get_redis_pool()
+        if await pool.ping():
             print("✓ Redis connected successfully")
         else:
             print("✗ Redis ping failed - caching will be disabled")
@@ -97,8 +101,8 @@ async def shutdown_event():
     await close_pool()
     print("✓ Database connection pool closed")
 
-    # Close Redis client
-    close_redis_client()
+    # Close Redis connection pool
+    await close_redis_pool()
     print("✓ Redis connection closed")
 
 
@@ -126,10 +130,10 @@ async def health_check():
         "database": "unknown"
     }
 
-    # Check Redis connectivity
+    # Check Redis connectivity (async)
     try:
-        redis_client = get_redis_client()
-        if redis_client.ping():
+        redis_pool = get_redis_pool()
+        if await redis_pool.ping():
             status["redis"] = "connected"
         else:
             status["redis"] = "disconnected"
@@ -153,6 +157,34 @@ async def health_check():
         status["status"] = "degraded"
 
     return status
+
+
+@app.get("/api/test/cached")
+@cached(key="test:cached:simple", ttl=60)
+async def test_cached_endpoint():
+    """Test endpoint to verify cache decorator works with async Redis.
+
+    This endpoint is cached with a 60-second TTL. The first call will be a cache MISS
+    and will simulate some work. Subsequent calls within 60 seconds should be cache HITs
+    from Redis.
+
+    Usage for testing:
+        1. First call: curl http://localhost:8200/api/test/cached
+           Expected: Cache MISS, response takes ~100ms
+        2. Second call (within 60s): curl http://localhost:8200/api/test/cached
+           Expected: Cache HIT, response is instant
+        3. Check Redis: redis-cli KEYS *
+           Expected: See key "test:cached:simple"
+    """
+    # Simulate some work
+    time.sleep(0.1)  # 100ms delay
+
+    return {
+        "status": "ok",
+        "message": "This response was generated (not from cache)",
+        "timestamp": datetime.now().isoformat(),
+        "note": "If you see the same timestamp on refresh, it's a cache hit!"
+    }
 
 
 if __name__ == "__main__":

@@ -1,7 +1,29 @@
 """Redis client wrapper with connection pooling and error handling.
 
-This module provides a Redis client with automatic connection pooling,
-retry logic, and health checks for caching research reports and market data.
+This module provides both async and sync Redis clients with automatic
+connection pooling, retry logic, and health checks for caching research
+reports and market data.
+
+Architecture:
+    - AsyncRedisClient: Async Redis client using redis.asyncio for non-blocking I/O
+    - RedisClient: Synchronous Redis client (legacy, for backward compatibility)
+    - Singleton pattern for connection pool (one pool per application)
+
+Usage (Async - Recommended):
+    # In FastAPI startup event
+    await init_redis_pool()
+
+    # In application code
+    redis = get_redis_pool()
+    await redis.set("key", "value")
+    value = await redis.get("key")
+
+    # In FastAPI shutdown event
+    await close_redis_pool()
+
+Usage (Sync - Legacy):
+    redis_client = get_redis_client()
+    redis_client.set("key", "value")
 """
 
 import os
@@ -11,14 +33,351 @@ from contextlib import contextmanager
 import time
 
 import redis
+from redis import asyncio as aioredis
 from redis.connection import ConnectionPool
 from redis.exceptions import (
     RedisError,
     ConnectionError as RedisConnectionError,
     TimeoutError as RedisTimeoutError,
 )
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# ASYNC REDIS CLIENT (Recommended for non-blocking I/O)
+# ============================================================================
+
+
+class RedisConfig:
+    """Configuration for Redis connection pool.
+
+    Loads settings from environment variables with sensible defaults.
+    """
+
+    def __init__(self):
+        """Initialize Redis configuration from environment variables."""
+        self.host = os.getenv("REDIS_HOST", "localhost")
+        self.port = int(os.getenv("REDIS_PORT", "6379"))
+        self.db = int(os.getenv("REDIS_DB", "0"))
+        self.password = os.getenv("REDIS_PASSWORD", None)
+        self.max_connections = int(os.getenv("REDIS_MAX_CONNECTIONS", "10"))
+        self.socket_timeout = int(os.getenv("REDIS_SOCKET_TIMEOUT", "5"))
+        self.socket_connect_timeout = int(os.getenv("REDIS_SOCKET_CONNECT_TIMEOUT", "5"))
+        self.retry_on_timeout = os.getenv("REDIS_RETRY_ON_TIMEOUT", "true").lower() == "true"
+
+    def __repr__(self) -> str:
+        """String representation (safe - no password)."""
+        return (
+            f"RedisConfig("
+            f"host={self.host}, "
+            f"port={self.port}, "
+            f"db={self.db}, "
+            f"max_connections={self.max_connections})"
+        )
+
+
+# Global async Redis pool singleton
+_redis_pool: Optional[aioredis.Redis] = None
+_redis_config: Optional[RedisConfig] = None
+
+
+class AsyncRedisClient:
+    """Async Redis client wrapper with connection pool.
+
+    Provides async methods for Redis operations using connection pooling.
+    Should be used via the global pool functions (init_redis_pool, get_redis_pool).
+
+    Example:
+        redis = get_redis_pool()
+        client = AsyncRedisClient(redis)
+
+        # Basic operations
+        await client.set("key", "value", ttl=3600)
+        value = await client.get("key")
+        await client.delete("key")
+
+        # Check operations
+        exists = await client.exists("key")
+        is_alive = await client.ping()
+    """
+
+    def __init__(self, redis_client: aioredis.Redis):
+        """Initialize async Redis client.
+
+        Args:
+            redis_client: Async Redis client instance with connection pool
+        """
+        self.client = redis_client
+
+    async def ping(self) -> bool:
+        """Check if Redis server is reachable.
+
+        Returns:
+            True if server responds to ping, False otherwise
+        """
+        try:
+            result = await self.client.ping()
+            logger.debug("Redis ping successful")
+            return result
+        except Exception as e:
+            logger.error(f"Redis ping failed: {e}")
+            return False
+
+    async def get(self, key: str) -> Optional[str]:
+        """Get value from Redis.
+
+        Args:
+            key: Cache key
+
+        Returns:
+            Value if found, None otherwise
+        """
+        try:
+            value = await self.client.get(key)
+            if value is not None:
+                logger.debug(f"Cache HIT: {key}")
+            else:
+                logger.debug(f"Cache MISS: {key}")
+            return value
+        except Exception as e:
+            logger.error(f"Redis GET failed for key '{key}': {e}")
+            return None
+
+    async def set(
+        self,
+        key: str,
+        value: str,
+        ttl: Optional[int] = None
+    ) -> bool:
+        """Set value in Redis with optional TTL.
+
+        Args:
+            key: Cache key
+            value: Value to store
+            ttl: Time-to-live in seconds (None = no expiration)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if ttl:
+                await self.client.setex(key, ttl, value)
+            else:
+                await self.client.set(key, value)
+            logger.debug(f"Cache SET: {key} (ttl={ttl})")
+            return True
+        except Exception as e:
+            logger.error(f"Redis SET failed for key '{key}': {e}")
+            return False
+
+    async def delete(self, *keys: str) -> int:
+        """Delete one or more keys from Redis.
+
+        Args:
+            *keys: Keys to delete
+
+        Returns:
+            Number of keys deleted
+        """
+        try:
+            count = await self.client.delete(*keys)
+            logger.debug(f"Cache DELETE: {keys} (count={count})")
+            return count
+        except Exception as e:
+            logger.error(f"Redis DELETE failed for keys {keys}: {e}")
+            return 0
+
+    async def exists(self, *keys: str) -> int:
+        """Check if keys exist in Redis.
+
+        Args:
+            *keys: Keys to check
+
+        Returns:
+            Number of keys that exist
+        """
+        try:
+            count = await self.client.exists(*keys)
+            return count
+        except Exception as e:
+            logger.error(f"Redis EXISTS failed for keys {keys}: {e}")
+            return 0
+
+
+async def init_redis_pool() -> aioredis.Redis:
+    """Initialize the global async Redis connection pool.
+
+    Should be called once during FastAPI startup event. Creates a connection
+    pool that will be reused throughout the application lifetime.
+
+    Returns:
+        aioredis.Redis: The initialized Redis client with connection pool
+
+    Raises:
+        Exception: If pool initialization fails
+
+    Example:
+        @app.on_event("startup")
+        async def startup_event():
+            await init_redis_pool()
+            print("✓ Redis pool initialized")
+
+    Notes:
+        - Safe to call multiple times (returns existing pool if already initialized)
+        - Pool automatically manages connection lifecycle
+        - Connections are created on-demand up to max_connections
+    """
+    global _redis_pool, _redis_config
+
+    if _redis_pool is not None:
+        logger.info("Redis pool already initialized, returning existing pool")
+        return _redis_pool
+
+    # Load configuration
+    _redis_config = RedisConfig()
+    logger.info(f"Initializing Redis pool with config: {_redis_config}")
+
+    try:
+        # Build Redis URL
+        redis_url = f"redis://"
+        if _redis_config.password:
+            redis_url += f":{_redis_config.password}@"
+        redis_url += f"{_redis_config.host}:{_redis_config.port}/{_redis_config.db}"
+
+        # Create connection pool
+        _redis_pool = await aioredis.from_url(
+            redis_url,
+            max_connections=_redis_config.max_connections,
+            socket_timeout=_redis_config.socket_timeout,
+            socket_connect_timeout=_redis_config.socket_connect_timeout,
+            retry_on_timeout=_redis_config.retry_on_timeout,
+            decode_responses=True,  # Return strings instead of bytes
+        )
+
+        # Test the connection
+        await _redis_pool.ping()
+        logger.info(f"✓ Redis pool initialized successfully")
+        logger.info(f"  Redis server: {_redis_config.host}:{_redis_config.port}")
+        logger.info(f"  Max connections: {_redis_config.max_connections}")
+
+        return _redis_pool
+
+    except Exception as e:
+        logger.error(f"✗ Failed to initialize Redis pool: {e}", exc_info=True)
+        _redis_pool = None
+        _redis_config = None
+        raise
+
+
+def get_redis_pool() -> aioredis.Redis:
+    """Get the global async Redis connection pool.
+
+    Returns:
+        aioredis.Redis: The global Redis client with connection pool
+
+    Raises:
+        RuntimeError: If pool has not been initialized (call init_redis_pool() first)
+
+    Example:
+        async def cache_data():
+            redis = get_redis_pool()
+            await redis.set("key", "value")
+            value = await redis.get("key")
+    """
+    if _redis_pool is None:
+        raise RuntimeError(
+            "Redis pool has not been initialized. "
+            "Call init_redis_pool() during application startup."
+        )
+    return _redis_pool
+
+
+async def close_redis_pool():
+    """Close the global async Redis connection pool.
+
+    Should be called once during FastAPI shutdown event.
+    Gracefully closes all connections in the pool.
+
+    Example:
+        @app.on_event("shutdown")
+        async def shutdown_event():
+            await close_redis_pool()
+            print("✓ Redis pool closed")
+    """
+    global _redis_pool, _redis_config
+
+    if _redis_pool is None:
+        logger.info("Redis pool is not initialized, nothing to close")
+        return
+
+    try:
+        await _redis_pool.close()
+        logger.info("✓ Redis pool closed successfully")
+    except Exception as e:
+        logger.error(f"Error closing Redis pool: {e}", exc_info=True)
+    finally:
+        _redis_pool = None
+        _redis_config = None
+
+
+async def check_redis_health() -> dict:
+    """
+    Check the health and status of the Redis connection pool.
+
+    Returns:
+        dict: Redis health status including:
+            - status: "healthy", "degraded", or "unavailable"
+            - host: Redis server host
+            - port: Redis server port
+            - db: Redis database number
+            - max_connections: Maximum connections in pool
+            - error: Error message if unhealthy
+
+    Example:
+        health = await check_redis_health()
+        if health["status"] != "healthy":
+            logger.warning(f"Redis unhealthy: {health}")
+
+    Notes:
+        - Used by health check endpoints
+        - Safe to call frequently (lightweight operation)
+    """
+    if _redis_pool is None:
+        return {
+            "status": "unavailable",
+            "error": "Pool not initialized"
+        }
+
+    try:
+        # Test Redis connectivity with ping
+        await _redis_pool.ping()
+
+        # Return healthy status with configuration details
+        return {
+            "status": "healthy",
+            "host": _redis_config.host if _redis_config else None,
+            "port": _redis_config.port if _redis_config else None,
+            "db": _redis_config.db if _redis_config else None,
+            "max_connections": _redis_config.max_connections if _redis_config else None,
+        }
+
+    except Exception as e:
+        logger.error(f"Redis health check failed: {e}", exc_info=True)
+        return {
+            "status": "degraded",
+            "error": str(e),
+            "host": _redis_config.host if _redis_config else None,
+            "port": _redis_config.port if _redis_config else None,
+        }
+
+
+# ============================================================================
+# SYNC REDIS CLIENT (Legacy - for backward compatibility)
+# ============================================================================
 
 
 class RedisClient:
