@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Any
 
 from backend.db.pitch_db import find_pitch_by_id
 from backend.db.execution_db import log_execution_event
-from backend.multi_alpaca_client import MultiAlpacaManager
+from backend.multi_alpaca_client import MultiAlpacaManager, ALPACA_ACCOUNTS
 from backend.alpaca_integration.orders import create_bracket_order_from_pitch
 
 logger = logging.getLogger(__name__)
@@ -194,6 +194,41 @@ class TradeService:
                 # Get account name from pitch
                 account_name = pitch.get("account", "COUNCIL")
                 logger.info(f"Executing trade {trade_id} for account {account_name}")
+
+                # Validate account name exists in ALPACA_ACCOUNTS
+                if account_name not in ALPACA_ACCOUNTS:
+                    logger.error(
+                        f"Invalid account name '{account_name}' for trade {trade_id}. "
+                        f"Must be one of: {', '.join(ALPACA_ACCOUNTS.keys())}"
+                    )
+
+                    # Log account validation error event
+                    week_id = pitch.get("week_id", "unknown")
+                    await log_execution_event(
+                        week_id=week_id,
+                        event_type="account_validation_error",
+                        account=account_name,
+                        event_data={
+                            "trade_id": trade_id,
+                            "pitch_id": pitch.get("id"),
+                            "invalid_account": account_name,
+                            "valid_accounts": list(ALPACA_ACCOUNTS.keys()),
+                            "symbol": pitch.get("instrument"),
+                            "direction": pitch.get("direction"),
+                            "reason": f"Account '{account_name}' not found in ALPACA_ACCOUNTS configuration",
+                            "timestamp": datetime.utcnow().isoformat(),
+                        },
+                    )
+
+                    results.append(
+                        {
+                            "trade_id": trade_id,
+                            "status": "error",
+                            "account": account_name,
+                            "message": f"Invalid account name '{account_name}'. Must be one of: {', '.join(ALPACA_ACCOUNTS.keys())}",
+                        }
+                    )
+                    continue
 
                 # Skip DEEPSEEK baseline account (should remain flat for comparison)
                 if account_name == "DEEPSEEK":
