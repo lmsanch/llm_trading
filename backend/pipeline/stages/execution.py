@@ -136,11 +136,11 @@ class ExecutionStage(Stage):
     ) -> Dict[str, Any] | None:
         """
         Prepare trade for execution.
-        
+
         Args:
             decision: Chairman decision or PM pitch
             source: "council" or model key
-            
+
         Returns:
             Trade dict or None if invalid
         """
@@ -148,7 +148,12 @@ class ExecutionStage(Stage):
         account = decision.get("account", "Unknown")
         model_key = decision.get("model", "unknown")
         alpaca_id = decision.get("alpaca_id", "Unknown")
-        
+
+        # Skip DEEPSEEK baseline account (should remain flat for comparison)
+        if account == "DEEPSEEK":
+            print(f"  ⚠️  Skipping DEEPSEEK baseline account (must remain flat)")
+            return None
+
         # Get position size based on conviction
         conviction = decision.get("conviction", 0)
         position_size = self.POSITION_SIZING.get(conviction, 0.0)
@@ -199,13 +204,20 @@ class ExecutionStage(Stage):
     ) -> List[Dict[str, Any]]:
         """
         Place orders for multiple accounts in parallel.
-        
+
         Args:
             trades: List of trade dicts with 'approved': True
-            
+
         Returns:
             List of execution result dicts
         """
+        # Filter out DEEPSEEK baseline account (defensive check)
+        trades = [t for t in trades if t.get("account") != "DEEPSEEK"]
+
+        if not trades:
+            print("  ⚠️  No trades to execute after filtering baseline accounts")
+            return []
+
         # Prepare orders for Alpaca
         orders = []
         for trade in trades:

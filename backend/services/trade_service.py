@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 from backend.db.pitch_db import find_pitch_by_id
@@ -193,6 +194,36 @@ class TradeService:
                 # Get account name from pitch
                 account_name = pitch.get("account", "COUNCIL")
                 logger.info(f"Executing trade {trade_id} for account {account_name}")
+
+                # Skip DEEPSEEK baseline account (should remain flat for comparison)
+                if account_name == "DEEPSEEK":
+                    logger.info(f"Skipping DEEPSEEK baseline account for trade {trade_id}")
+
+                    # Log baseline account skipped event
+                    week_id = pitch.get("week_id", "unknown")
+                    await log_execution_event(
+                        week_id=week_id,
+                        event_type="baseline_account_skipped",
+                        account=account_name,
+                        event_data={
+                            "trade_id": trade_id,
+                            "pitch_id": pitch.get("id"),
+                            "symbol": pitch.get("instrument"),
+                            "direction": pitch.get("direction"),
+                            "reason": "DEEPSEEK is baseline account - must remain flat",
+                            "timestamp": datetime.utcnow().isoformat(),
+                        },
+                    )
+
+                    results.append(
+                        {
+                            "trade_id": trade_id,
+                            "status": "skipped",
+                            "account": account_name,
+                            "message": "Baseline account skipped - remains flat for comparison",
+                        }
+                    )
+                    continue
 
                 # Get Alpaca client for this account
                 alpaca_account = manager.clients.get(account_name)
