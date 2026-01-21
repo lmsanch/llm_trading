@@ -4,7 +4,7 @@
 const BASE_URL = 'http://100.100.238.72:8200/api';
 const USE_MOCK = false;
 
-import { mockResearchPacks, mockPMPitches, mockCouncilDecision, mockTrades, mockPositions, mockAccounts } from '../lib/mockData';
+import { mockResearchPacks, mockPMPitches, mockCouncilDecision, mockTrades, mockPositions, mockAccounts, mockPerformanceHistory, mockPerformanceComparison } from '../lib/mockData';
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -93,6 +93,25 @@ export const tradingApi = {
         return mockAccounts;
     }
     const res = await fetch(`${BASE_URL}/accounts`);
+    return res.json();
+  },
+
+  // Performance
+  getPerformanceHistory: async (account, days = 7) => {
+    if (USE_MOCK) {
+        await delay(300);
+        return mockPerformanceHistory;
+    }
+    const res = await fetch(`${BASE_URL}/performance/history?account=${account}&days=${days}`);
+    return res.json();
+  },
+
+  getPerformanceComparison: async () => {
+    if (USE_MOCK) {
+        await delay(300);
+        return mockPerformanceComparison;
+    }
+    const res = await fetch(`${BASE_URL}/performance/comparison`);
     return res.json();
   }
 };
