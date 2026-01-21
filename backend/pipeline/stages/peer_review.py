@@ -456,22 +456,28 @@ IMPORTANT:
         Returns:
             Validated and enriched review dict or None if invalid
         """
+        import uuid
 
-        # Validate required fields
-        required_fields = [
-            "review_id",
+        # Validate required fields from model response
+        required_fields_from_model = [
             "pitch_label",
-            "reviewer_model",
             "scores",
             "best_argument_against",
             "one_flip_condition",
-            "suggested_fix",
         ]
 
-        for field in required_fields:
+        for field in required_fields_from_model:
             if field not in review:
                 print(f"  ⚠️  Missing field: {field}")
                 return None
+
+        # Enrich with generated/known fields
+        if "review_id" not in review:
+            review["review_id"] = str(uuid.uuid4())
+        if "reviewer_model" not in review:
+            review["reviewer_model"] = reviewer_model
+        if "suggested_fix" not in review:
+            review["suggested_fix"] = review.get("suggested_fix", "N/A")
 
         # Validate scores
         scores = review.get("scores", {})
