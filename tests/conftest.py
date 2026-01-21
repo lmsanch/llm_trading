@@ -350,3 +350,26 @@ def async_raise():
     """
     from tests.fixtures.test_helpers import async_raise
     return async_raise
+
+
+# ==================== Database Pool Fixtures ====================
+
+@pytest.fixture(scope="function")
+async def db_pool():
+    """Initialize database connection pool for testing.
+
+    This fixture initializes the database pool before each test and closes
+    it after the test completes. Ensures proper cleanup of connections.
+
+    Yields:
+        None (pool is accessible via get_pool() after initialization)
+    """
+    from backend.db.pool import init_pool, close_pool
+
+    # Initialize the pool
+    await init_pool()
+
+    yield
+
+    # Close the pool after test
+    await close_pool()
