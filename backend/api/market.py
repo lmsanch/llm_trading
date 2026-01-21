@@ -1,9 +1,10 @@
 """Market data API endpoints."""
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from backend.services.market_service import MarketService
 
@@ -16,8 +17,66 @@ router = APIRouter(prefix="/api/market", tags=["market"])
 market_service = MarketService()
 
 
+# ============================================================================
+# Response Models
+# ============================================================================
+
+
+class MarketSnapshotResponse(BaseModel):
+    """Response model for market snapshot."""
+
+    market_snapshot: Dict[str, Any] = Field(
+        description="Comprehensive market data including indicators and context"
+    )
+    timestamp: str = Field(description="ISO timestamp of the snapshot")
+
+
+class Return7DayData(BaseModel):
+    """7-day return data for a single symbol."""
+
+    symbol: str = Field(description="Stock ticker symbol")
+    log_return_7d: float = Field(description="7-day log return")
+    pct_return: float = Field(description="7-day percentage return")
+
+
+class MarketMetricsResponse(BaseModel):
+    """Response model for market metrics."""
+
+    date: str = Field(description="Latest date of the data (ISO format)")
+    returns_7d: List[Return7DayData] = Field(
+        description="7-day returns for all tracked symbols"
+    )
+    correlation_matrix: Dict[str, Dict[str, float]] = Field(
+        description="Nested dict of symbol-to-symbol correlations"
+    )
+    symbols: List[str] = Field(
+        description="Sorted list of symbols in the correlation matrix"
+    )
+
+
+class PriceData(BaseModel):
+    """OHLCV price data for a single symbol."""
+
+    symbol: str = Field(description="Stock ticker symbol")
+    date: str = Field(description="Date of the price data (YYYY-MM-DD)")
+    open: float = Field(description="Opening price")
+    high: float = Field(description="Highest price")
+    low: float = Field(description="Lowest price")
+    close: float = Field(description="Closing price")
+    volume: int = Field(description="Trading volume")
+
+
+class CurrentPricesResponse(BaseModel):
+    """Response model for current prices."""
+
+    asof_date: str = Field(description="The date of the price data (ISO format)")
+    prices: List[PriceData] = Field(
+        description="List of OHLCV data for all tracked symbols"
+    )
+
+
 @router.get("/snapshot")
-async def get_market_snapshot() -> Dict[str, Any]:
+async def get_market_snapshot() -> MarketSnapshotResponse:
     """
     Get current market snapshot for research context.
 
@@ -46,7 +105,7 @@ async def get_market_snapshot() -> Dict[str, Any]:
 
 
 @router.get("/metrics")
-async def get_market_metrics() -> Dict[str, Any]:
+async def get_market_metrics() -> MarketMetricsResponse:
     """
     Get latest 7-day returns and correlation matrix.
 
@@ -104,7 +163,7 @@ async def get_market_metrics() -> Dict[str, Any]:
 
 
 @router.get("/prices")
-async def get_current_prices() -> Dict[str, Any]:
+async def get_current_prices() -> CurrentPricesResponse:
     """
     Get current prices and volumes for all tradable instruments.
 
