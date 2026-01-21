@@ -4,10 +4,11 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +92,83 @@ except Exception as e:
     calculate_aggregate_rankings = None
 
 
-@router.get("", response_model=List[Dict])
-async def list_conversations() -> List[Dict[str, Any]]:
+# ============================================================================
+# Response Models
+# ============================================================================
+
+
+class ConversationMetadata(BaseModel):
+    """Response model for conversation metadata (list view)."""
+
+    id: str = Field(description="Unique conversation identifier (UUID)")
+    created_at: str = Field(description="ISO timestamp of conversation creation")
+    title: str = Field(description="Conversation title")
+    message_count: int = Field(description="Number of messages in the conversation")
+
+
+class UserMessage(BaseModel):
+    """User message in a conversation."""
+
+    role: str = Field(default="user", description="Message role (always 'user')")
+    content: str = Field(description="Message content")
+
+
+class Stage1ModelResponse(BaseModel):
+    """Individual model response from Stage 1."""
+
+    model: str = Field(description="Model name")
+    response: str = Field(description="Model's response text")
+    reasoning: Optional[str] = Field(default=None, description="Model's reasoning (if available)")
+    timing: Optional[float] = Field(default=None, description="Response time in seconds")
+
+
+class Stage2Ranking(BaseModel):
+    """Peer review ranking from Stage 2."""
+
+    model: str = Field(description="Model name that provided the ranking")
+    rankings: Dict[str, int] = Field(description="Rankings dict (e.g., {'A': 1, 'B': 2})")
+    reasoning: Optional[str] = Field(default=None, description="Ranking reasoning")
+    timing: Optional[float] = Field(default=None, description="Ranking time in seconds")
+
+
+class Stage3Synthesis(BaseModel):
+    """Final synthesis from Stage 3 (Chairman)."""
+
+    selected_model: str = Field(description="Model selected as best response")
+    selected_response: str = Field(description="The selected response text")
+    reasoning: Optional[str] = Field(default=None, description="Chairman's reasoning")
+    timing: Optional[float] = Field(default=None, description="Synthesis time in seconds")
+
+
+class AssistantMessage(BaseModel):
+    """Assistant message with multi-stage council response."""
+
+    role: str = Field(default="assistant", description="Message role (always 'assistant')")
+    stage1: List[Stage1ModelResponse] = Field(description="Stage 1 individual responses")
+    stage2: List[Stage2Ranking] = Field(description="Stage 2 peer rankings")
+    stage3: Stage3Synthesis = Field(description="Stage 3 final synthesis")
+
+
+class Conversation(BaseModel):
+    """Response model for a complete conversation."""
+
+    id: str = Field(description="Unique conversation identifier (UUID)")
+    created_at: str = Field(description="ISO timestamp of conversation creation")
+    title: str = Field(description="Conversation title")
+    messages: List[Dict[str, Any]] = Field(description="List of messages (user and assistant)")
+
+
+class CouncilResponse(BaseModel):
+    """Response model for the council process."""
+
+    stage1: List[Dict[str, Any]] = Field(description="Stage 1 individual model responses")
+    stage2: List[Dict[str, Any]] = Field(description="Stage 2 peer review rankings")
+    stage3: Dict[str, Any] = Field(description="Stage 3 final synthesis")
+    metadata: Dict[str, Any] = Field(description="Processing metadata (timings, rankings, etc.)")
+
+
+@router.get("", response_model=List[ConversationMetadata])
+async def list_conversations() -> List[ConversationMetadata]:
     """
     List all conversations (metadata only).
 
@@ -147,8 +223,8 @@ async def list_conversations() -> List[Dict[str, Any]]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("", response_model=Dict)
-async def create_conversation(request: Dict[str, Any]) -> Dict[str, Any]:
+@router.post("", response_model=Conversation)
+async def create_conversation(request: Dict[str, Any]) -> Conversation:
     """
     Create a new conversation.
 
@@ -201,8 +277,8 @@ async def create_conversation(request: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{conversation_id}", response_model=Dict)
-async def get_conversation(conversation_id: str) -> Dict[str, Any]:
+@router.get("/{conversation_id}", response_model=Conversation)
+async def get_conversation(conversation_id: str) -> Conversation:
     """
     Get a specific conversation with all its messages.
 
@@ -271,10 +347,10 @@ async def get_conversation(conversation_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{conversation_id}/message")
+@router.post("/{conversation_id}/message", response_model=CouncilResponse)
 async def send_message(
     conversation_id: str, request: Dict[str, Any]
-) -> Dict[str, Any]:
+) -> CouncilResponse:
     """
     Send a message and run the 3-stage council process.
 
