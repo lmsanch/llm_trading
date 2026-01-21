@@ -7,6 +7,7 @@ import { Select } from "../ui/Select";
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Play, CheckCheck, RefreshCw, Send, Loader2, Calendar, TrendingUp, FileText, ChevronDown, ChevronUp, ShieldAlert, ExternalLink, Database, Share2 } from 'lucide-react';
 import WeeklyGraphViewer from '../../WeeklyGraphViewer';
+import { useToast } from '../../../hooks/useToast';
 
 const PM_MODELS = [
   { key: 'chatgpt', label: 'GPT-5.2', account: 'CHATGPT' },
@@ -368,6 +369,7 @@ function ResearchPreview({ data }) {
 }
 
 export default function PMsTab() {
+  const toast = useToast();
   const PITCH_SCHEMA_VERSION = 'v3_risk_profiles';
 
   const checkCacheVersion = () => {
@@ -795,11 +797,10 @@ export default function PMsTab() {
       const result = await response.json();
       console.log('✅ Council synthesis started:', result);
 
-      // TODO: Show success message or redirect to Council tab
-      alert('Council synthesis started! Check the Council tab in a moment.');
+      toast.success('Council Synthesis Started', 'Check the Council tab in a moment.');
     } catch (error) {
       console.error('❌ Error starting council synthesis:', error);
-      alert('Failed to start council synthesis. Check console for details.');
+      toast.error('Synthesis Failed', 'Failed to start council synthesis. Check console for details.');
     } finally {
       setSendingToCouncil(false);
     }
