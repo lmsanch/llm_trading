@@ -1,0 +1,87 @@
+======================================================================
+PEER REVIEW BUG REPRODUCTION TEST
+======================================================================
+
+📊 Input: 4 PM pitches
+   - Acct 1 (GPT-5.1): SPY LONG
+   - Acct 2 (Gemini): TLT SHORT
+   - Acct 3 (Sonnet): GLD LONG
+   - Acct 4 (Grok): FLAT
+
+🔍 Expected behavior:
+   - Each of 4 models should review 3 other pitches (N-1)
+   - Total reviews: 4 models × 3 reviews = 12 reviews
+
+🐛 Bug hypothesis:
+   - Parser only extracts FIRST review from each model's response
+   - Total reviews: 4 models × 1 review = 4 reviews (WRONG!)
+
+======================================================================
+RUNNING PEER REVIEW STAGE...
+======================================================================
+
+============================================================
+👥 PEER REVIEW STAGE
+============================================================
+
+📋 Found 4 PM pitches to review
+
+🔍 Anonymizing pitches...
+  ✅ Anonymized as: Pitch A, Pitch B, Pitch C, Pitch D
+🎯 Generating peer reviews...
+🔑 Requesty API Key (first 20 chars): rqsty-sk-Qt9jAa6zSXi...
+🔗 Requesty API URL: https://router.requesty.ai/v1
+🔑 Requesty API Key (first 20 chars): rqsty-sk-Qt9jAa6zSXi...
+🔗 Requesty API URL: https://router.requesty.ai/v1
+🔑 Requesty API Key (first 20 chars): rqsty-sk-Qt9jAa6zSXi...
+🔗 Requesty API URL: https://router.requesty.ai/v1
+🔑 Requesty API Key (first 20 chars): rqsty-sk-Qt9jAa6zSXi...
+🔗 Requesty API URL: https://router.requesty.ai/v1
+🔑 Requesty API Key (first 20 chars): rqsty-sk-Qt9jAa6zSXi...
+🔗 Requesty API URL: https://router.requesty.ai/v1
+
+✅ CHATGPT (CHATGPT)
+   Reviewed 7 pitches
+   Average score: 5.71/10
+
+✅ GEMINI (GEMINI)
+   Reviewed 7 pitches
+   Average score: 4.86/10
+
+✅ GROQ (GROQ)
+   Reviewed 7 pitches
+   Average score: 6.57/10
+
+✅ CLAUDE (CLAUDE)
+   Reviewed 7 pitches
+   Average score: 5.14/10
+
+✅ DEEPSEEK (DEEPSEEK)
+   Reviewed 7 pitches
+   Average score: 7.14/10
+  ✅ Generated 5 peer reviews
+
+======================================================================
+RESULTS
+======================================================================
+
+📈 Actual reviews generated: 5
+
+📋 Reviews per model:
+   - gpt-4.1-trader: 1 review(s)
+     → Pitch A (avg score: 5.7/10)
+   - Expert_Trader_Bot: 1 review(s)
+     → Pitch A (avg score: 4.9/10)
+   - ExpertTraderAI: 1 review(s)
+     → Pitch A (avg score: 6.6/10)
+   - claude-3-7-sonnet-20250219: 1 review(s)
+     → Pitch A (avg score: 5.1/10)
+   - model_name: 1 review(s)
+     → Pitch A (avg score: 7.1/10)
+
+🎯 Verdict:
+   ⚠️  UNEXPECTED: 5 reviews generated
+
+💾 Detailed output saved to: ./.auto-claude/specs/014-anonymized-peer-review-system/peer_review_output.json
+
+✅ Test completed: 5 reviews generated

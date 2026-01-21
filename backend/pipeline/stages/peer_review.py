@@ -177,13 +177,15 @@ Be fair but critical. Identify weaknesses and suggest improvements.""",
         peer_reviews = []
         for model_key, response in responses.items():
             if response is not None:
-                review = self._parse_peer_review(response["content"], model_key)
-                if review:
-                    peer_reviews.append(review)
+                reviews = self._parse_peer_review(response["content"], model_key)
+                if reviews:
+                    peer_reviews.extend(reviews)
                     model_info = REQUESTY_MODELS[model_key]
                     print(f"\n✅ {model_info['account']} ({model_key.upper()})")
-                    print(f"   Reviewed {len(review['scores'])} pitches")
-                    print(f"   Average score: {review.get('average_score', 0):.2f}/10")
+                    print(f"   Reviewed {len(reviews)} pitches")
+                    # Calculate average score across all reviews
+                    avg_score = sum(r.get('average_score', 0) for r in reviews) / len(reviews)
+                    print(f"   Average score: {avg_score:.2f}/10")
                 else:
                     model_info = REQUESTY_MODELS[model_key]
                     print(
@@ -302,7 +304,9 @@ Be fair but critical. Identify weaknesses and suggest improvements.""",
 
 ### OUTPUT FORMAT:
 
-For each pitch, return as valid JSON:
+Return as JSON array: [{{review for Pitch A}}, {{review for Pitch B}}, ...]
+
+Each review object should have this structure:
 
 {{
   "review_id": "uuid",
@@ -313,7 +317,7 @@ For each pitch, return as valid JSON:
     "edge_plausibility": 7,
     "timing_catalyst": 6,
     "risk_definition": 9,
-    "indicator_integrity": 8,
+    "risk_management": 8,
     "originality": 5,
     "tradeability": 7
   }},
@@ -325,6 +329,7 @@ For each pitch, return as valid JSON:
 
 IMPORTANT:
 - Review ALL pitches (don't skip any)
+- Return a JSON ARRAY of review objects, one per pitch
 - Be fair and objective
 - Provide specific, actionable feedback
 - Return as valid JSON only, no markdown"""
@@ -333,7 +338,7 @@ IMPORTANT:
 
     def _parse_peer_review(
         self, content: str, reviewer_model: str
-    ) -> Dict[str, Any] | None:
+    ) -> List[Dict[str, Any]]:
         """
         Parse peer review from LLM response.
 
@@ -342,7 +347,7 @@ IMPORTANT:
             reviewer_model: Model identifier
 
         Returns:
-            Parsed review dict or None if invalid
+            List of parsed review dicts (empty list if invalid)
         """
         import json
         import uuid
@@ -419,34 +424,63 @@ IMPORTANT:
                 # endregion
             except JSONDecodeError as e:
                 print(f"  ⚠️  JSON decode error: {e}")
-                return None
+                return []
 
         if review is None:
             print(f"  ⚠️  No JSON found in review from {reviewer_model}")
-            return None
+            return []
 
-        # If model returned a list of reviews, take the first element
+        # If model returned a list of reviews, validate and return all
         if isinstance(review, list):
             if not review:
                 print(f"  ⚠️  Empty review list from {reviewer_model}")
-                return None
-            review = review[0]
+                return []
+            reviews_to_return = []
+            for single_review in review:
+                validated = self._validate_and_enrich_review(single_review, reviewer_model)
+                if validated:
+                    reviews_to_return.append(validated)
+            return reviews_to_return
 
-        # Validate required fields
-        required_fields = [
-            "review_id",
+        # Single review - validate and return as list
+        validated = self._validate_and_enrich_review(review, reviewer_model)
+        return [validated] if validated else []
+
+    def _validate_and_enrich_review(
+        self, review: Dict[str, Any], reviewer_model: str
+    ) -> Dict[str, Any] | None:
+        """
+        Validate and enrich a single review dict.
+
+        Args:
+            review: Review dict to validate
+            reviewer_model: Model identifier
+
+        Returns:
+            Validated and enriched review dict or None if invalid
+        """
+        import uuid
+
+        # Validate required fields from model response
+        required_fields_from_model = [
             "pitch_label",
-            "reviewer_model",
             "scores",
             "best_argument_against",
             "one_flip_condition",
-            "suggested_fix",
         ]
 
-        for field in required_fields:
+        for field in required_fields_from_model:
             if field not in review:
                 print(f"  ⚠️  Missing field: {field}")
                 return None
+
+        # Enrich with generated/known fields
+        if "review_id" not in review:
+            review["review_id"] = str(uuid.uuid4())
+        if "reviewer_model" not in review:
+            review["reviewer_model"] = reviewer_model
+        if "suggested_fix" not in review:
+            review["suggested_fix"] = review.get("suggested_fix", "N/A")
 
         # Validate scores
         scores = review.get("scores", {})

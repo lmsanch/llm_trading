@@ -1,0 +1,394 @@
+{
+  "total_reviews": 20,
+  "expected_reviews": 12,
+  "bug_confirmed": false,
+  "reviews_by_reviewer": {
+    "gpt-4.1-trader": 4,
+    "ExpertTrader_Evaluator": 4,
+    "ExpertTraderAI": 4,
+    "claude-3-7-sonnet": 4,
+    "ExpertTraderReviewer": 4
+  },
+  "reviews": [
+    {
+      "review_id": "5f8860c8-4d0e-4ab5-a55e-cdf8f18fa021",
+      "pitch_label": "Pitch A",
+      "reviewer_model": "gpt-4.1-trader",
+      "scores": {
+        "clarity": 6,
+        "edge_plausibility": 5,
+        "timing_catalyst": 4,
+        "risk_definition": 6,
+        "risk_management": 6,
+        "originality": 3,
+        "tradeability": 9
+      },
+      "best_argument_against": "The thesis is effectively a consensus, trend-following macro view without a differentiated edge, and over a 1-week horizon SPY is heavily driven by noise and short-term flows rather than a vague 'Fed pause likely' narrative. Momentum and a breakout above 500 are well-known and already priced by systematic and discretionary traders alike, so you may be buying into crowded positioning at poor short-term risk-reward, especially if any minor macro disappointment hits in the next week.",
+      "one_flip_condition": "Would flip to SHORT if price quickly fails back below the 500 breakout level on above-average volume and closes there for at least one session, especially if accompanied by a hawkish repricing in Fed funds futures or a surprise uptick in yields.",
+      "suggested_fix": "Specify concrete, time-bound catalysts and technical levels: e.g., define the breakout level with a clear retest trigger (e.g., hold above 500 on daily close for 2 days), anchor the 1-week timing to specific events (Fed meeting, key data prints, major earnings), and quantify the momentum signal (e.g., strength vs. prior 20-day range, breadth, volatility regime). Also explain why you believe short-term positioning and options skew favor further upside rather than a mean-reverting pullback through your 2% stop.",
+      "timestamp": "2026-01-21T02:19:45.460626",
+      "average_score": 5.57
+    },
+    {
+      "review_id": "b5915848-3c53-4e43-89e6-47b1c163b9db",
+      "pitch_label": "Pitch B",
+      "reviewer_model": "gpt-4.1-trader",
+      "scores": {
+        "clarity": 7,
+        "edge_plausibility": 6,
+        "timing_catalyst": 4,
+        "risk_definition": 6,
+        "risk_management": 6,
+        "originality": 4,
+        "tradeability": 9
+      },
+      "best_argument_against": "The macro thesis (persistent inflation, more hikes, rising yields) is widely held and heavily reflected in positioning and term premia, so over a 1-week horizon you may simply be leaning into an already crowded bear-duration trade. Any modestly soft inflation print or dovish Fed tone can trigger a sharp short-covering rally in TLT that easily hits your 2.5% stop, while your 4% take profit may require a larger macro surprise than is likely within a week.",
+      "one_flip_condition": "Would flip to LONG if the next inflation or labor data release comes in meaningfully softer than consensus and the front-end of the curve rallies with a clear dovish repricing (e.g., 10\u201315 bps move lower in 2y yields) without TLT making a new local low, signaling potential exhaustion of the bear move.",
+      "suggested_fix": "Tie the 1-week short to specific dated catalysts (e.g., next CPI, PCE, NFP, or FOMC) and quantify what constitutes a continuation vs. reversal in yields (e.g., need to see 10y yields break and hold above a defined resistance level on closing basis). Also incorporate positioning/flow or options skews (e.g., CFTC data, options skew, dealer gamma) to support why there is still asymmetry to the downside in TLT over such a short horizon rather than risk of a squeeze.",
+      "timestamp": "2026-01-21T02:19:45.460646",
+      "average_score": 6.0
+    },
+    {
+      "review_id": "a0a4eb4f-5014-4f21-a9a9-462ac28b4615",
+      "pitch_label": "Pitch C",
+      "reviewer_model": "gpt-4.1-trader",
+      "scores": {
+        "clarity": 5,
+        "edge_plausibility": 5,
+        "timing_catalyst": 3,
+        "risk_definition": 6,
+        "risk_management": 6,
+        "originality": 3,
+        "tradeability": 9
+      },
+      "best_argument_against": "The thesis strings together generic gold bull arguments (safe haven, weaker dollar, geopolitics) without demonstrating that these forces are actually dominant over the next 1 week; gold frequently chops or mean-reverts on that horizon. Safe haven flows can just as easily go into USD or Treasuries, and if real yields stabilize or rise slightly, gold can underperform even with headlines. The supposed drivers may already be in the price, leaving you exposed to a dollar bounce or real-yield move that quickly tags your 3% stop.",
+      "one_flip_condition": "Would flip to SHORT if real yields push higher (e.g., 10y TIPS yield breaks a key resistance level) while GLD fails to make new highs or shows negative divergence, and the dollar index (DXY) stabilizes or turns up from support, indicating gold is losing macro support.",
+      "suggested_fix": "Anchor the trade to measurable drivers and levels: specify the state of real yields, DXY, and positioning, and explain why they are likely to support upside in the next 7 days (e.g., known geopolitical events, central bank meetings, or expected data that can weaken USD/real yields). Also define specific technical triggers for entry (e.g., breakout above a recent range high with volume) so the 3%/6% risk-reward aligns with an identifiable setup rather than a generic macro narrative.",
+      "timestamp": "2026-01-21T02:19:45.460656",
+      "average_score": 5.29
+    },
+    {
+      "review_id": "67f2f456-5a63-4a0a-b5ac-6e4c76ce0c7c",
+      "pitch_label": "Pitch D",
+      "reviewer_model": "gpt-4.1-trader",
+      "scores": {
+        "clarity": 4,
+        "edge_plausibility": 5,
+        "timing_catalyst": 2,
+        "risk_definition": 3,
+        "risk_management": 5,
+        "originality": 4,
+        "tradeability": 10
+      },
+      "best_argument_against": "Declaring 'too much uncertainty' without specifying what regimes or scenarios you are avoiding effectively abdicates the opportunity to harvest risk premia when others are fearful; uncertainty itself is often the reason risk assets are mispriced. Over a 1-week horizon, being structurally flat with no defined re-entry criteria may lead to missing clear, high-quality setups that emerge during volatility, and there is no explicit framework for what would reduce that uncertainty.",
+      "one_flip_condition": "Would flip to a RISK-ON bias (e.g., net LONG equities or duration) if realized volatility spikes and then starts to mean-revert while key macro events (e.g., a major central bank meeting or data print) are resolved in line with or better than expectations, reducing event risk and clarifying the distribution of outcomes.",
+      "suggested_fix": "Define specific indicators or events that constitute 'too much uncertainty' (e.g., implied/realized vol thresholds, dispersion across macro assets, upcoming data/event cluster) and lay out precise triggers for re-engaging risk (e.g., vol crush after events, breakouts from ranges, narrowing of policy path dispersion). This turns a vague flat stance into a rule-based defensive posture with a clear plan for redeployment rather than an open-ended sideline decision.",
+      "timestamp": "2026-01-21T02:19:45.460663",
+      "average_score": 4.71
+    },
+    {
+      "review_id": "8a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
+      "pitch_label": "Pitch A",
+      "reviewer_model": "ExpertTrader_Evaluator",
+      "scores": {
+        "clarity": 7,
+        "edge_plausibility": 5,
+        "timing_catalyst": 6,
+        "risk_definition": 6,
+        "risk_management": 7,
+        "originality": 2,
+        "tradeability": 9
+      },
+      "best_argument_against": "The 'Fed pause' thesis is likely already priced into the breakout above 500. If the market is extended, this breakout is a prime candidate for a liquidity grab/bull trap, especially if volume is declining on the move up.",
+      "one_flip_condition": "A daily close back below the 500 breakout level on volume higher than the breakout volume (failed breakout).",
+      "suggested_fix": "Add a volume confirmation requirement to the entry policy and specify which specific economic data point in the next week supports the 'Fed pause' narrative to justify the 1W horizon.",
+      "timestamp": "2026-01-21T02:19:45.460838",
+      "average_score": 6.0
+    },
+    {
+      "review_id": "9b2c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e",
+      "pitch_label": "Pitch B",
+      "reviewer_model": "ExpertTrader_Evaluator",
+      "scores": {
+        "clarity": 8,
+        "edge_plausibility": 7,
+        "timing_catalyst": 6,
+        "risk_definition": 7,
+        "risk_management": 6,
+        "originality": 4,
+        "tradeability": 8
+      },
+      "best_argument_against": "The thesis relies on 'inflation persisting,' but bond markets are forward-looking. If equities crack (risk-off), we could see a 'flight to safety' into bonds, causing yields to drop and TLT to rally regardless of the inflation narrative.",
+      "one_flip_condition": "A sudden spike in jobless claims or a weak NFP print, which would immediately shift the narrative from inflation to recession risk.",
+      "suggested_fix": "Improve the Risk/Reward ratio. A 2.5% stop for a 4.0% gain (1.6R) is sub-optimal for a directional breakout trade. Tighten the stop or target a larger move based on volatility.",
+      "timestamp": "2026-01-21T02:19:45.460850",
+      "average_score": 6.57
+    },
+    {
+      "review_id": "0c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f",
+      "pitch_label": "Pitch C",
+      "reviewer_model": "ExpertTrader_Evaluator",
+      "scores": {
+        "clarity": 6,
+        "edge_plausibility": 4,
+        "timing_catalyst": 3,
+        "risk_definition": 5,
+        "risk_management": 5,
+        "originality": 3,
+        "tradeability": 8
+      },
+      "best_argument_against": "The thesis contradicts Pitch B. If yields are rising (TLT down), real rates are likely rising, which is historically very bearish for non-yielding assets like Gold. 'Geopolitics' is too vague a catalyst for a 1-week trade.",
+      "one_flip_condition": "A breakout in the US Dollar Index (DXY) above recent highs, which would mechanically pressure Gold prices downward.",
+      "suggested_fix": "Define the specific geopolitical event or technical level on the DXY that acts as the trigger. The 3% stop is likely too wide for a 1-week horizon on Gold; tighten to improve position sizing.",
+      "timestamp": "2026-01-21T02:19:45.460857",
+      "average_score": 4.86
+    },
+    {
+      "review_id": "1d4e5f6a-7b8c-9d0e-1f2a-3b4c5d6e7f8g",
+      "pitch_label": "Pitch D",
+      "reviewer_model": "ExpertTrader_Evaluator",
+      "scores": {
+        "clarity": 9,
+        "edge_plausibility": 6,
+        "timing_catalyst": 1,
+        "risk_definition": 10,
+        "risk_management": 10,
+        "originality": 1,
+        "tradeability": 10
+      },
+      "best_argument_against": "Opportunity cost. With SPY breaking out and TLT breaking down, volatility is present. Sitting in cash guarantees zero return during a week where significant moves are technically signaled.",
+      "one_flip_condition": "VIX dropping below 15 or a specific liquidity injection event that clarifies the market regime.",
+      "suggested_fix": "Define the 'clear signals' explicitly. Instead of just saying 'wait,' state: 'Will deploy capital if SPY holds > 505 for 2 days or VIX drops < 15.' Turn the hesitation into a conditional plan.",
+      "timestamp": "2026-01-21T02:19:45.460864",
+      "average_score": 6.71
+    },
+    {
+      "review_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "pitch_label": "Pitch A",
+      "reviewer_model": "ExpertTraderAI",
+      "scores": {
+        "clarity": 7,
+        "edge_plausibility": 6,
+        "timing_catalyst": 5,
+        "risk_definition": 7,
+        "risk_management": 8,
+        "originality": 3,
+        "tradeability": 10
+      },
+      "best_argument_against": "The technical breakout above 500 may be a false signal in a volatile market, and a Fed pause is not guaranteed if recent data shows persistent inflation, potentially leading to continued equity weakness.",
+      "one_flip_condition": "Would flip to SHORT if the Fed delivers a hawkish surprise in their upcoming statement, signaling further rate hikes.",
+      "suggested_fix": "Bolster the thesis with specific momentum indicators (e.g., RSI or MACD readings) and evidence for the Fed pause, such as recent CPI trends.",
+      "timestamp": "2026-01-21T02:19:45.460984",
+      "average_score": 6.57
+    },
+    {
+      "review_id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
+      "pitch_label": "Pitch B",
+      "reviewer_model": "ExpertTraderAI",
+      "scores": {
+        "clarity": 8,
+        "edge_plausibility": 7,
+        "timing_catalyst": 6,
+        "risk_definition": 8,
+        "risk_management": 7,
+        "originality": 4,
+        "tradeability": 9
+      },
+      "best_argument_against": "Inflation may be cooling faster than expected, with upcoming CPI data potentially showing softness that prompts market expectations of Fed cuts, supporting a bond rally instead of further decline.",
+      "one_flip_condition": "Would flip to LONG if CPI data comes in softer than expected, indicating disinflation and potential Fed pivot.",
+      "suggested_fix": "Identify the exact timing of the next CPI release or Fed meeting as the primary catalyst to strengthen timing conviction.",
+      "timestamp": "2026-01-21T02:19:45.460995",
+      "average_score": 7.0
+    },
+    {
+      "review_id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
+      "pitch_label": "Pitch C",
+      "reviewer_model": "ExpertTraderAI",
+      "scores": {
+        "clarity": 6,
+        "edge_plausibility": 5,
+        "timing_catalyst": 4,
+        "risk_definition": 7,
+        "risk_management": 8,
+        "originality": 4,
+        "tradeability": 8
+      },
+      "best_argument_against": "Geopolitical tensions are chronic and often priced in, while dollar weakness could reverse quickly on strong US economic data, undermining safe-haven demand for gold.",
+      "one_flip_condition": "Would flip to SHORT if major geopolitical tensions ease (e.g., Ukraine-Russia progress) or USD index breaks higher on robust jobs data.",
+      "suggested_fix": "Specify a near-term catalyst, such as an upcoming geopolitical summit or USD-related data release, to justify the 1W horizon.",
+      "timestamp": "2026-01-21T02:19:45.461001",
+      "average_score": 6.0
+    },
+    {
+      "review_id": "d4e5f6g7-h8i9-0123-defg-456789012345",
+      "pitch_label": "Pitch D",
+      "reviewer_model": "ExpertTraderAI",
+      "scores": {
+        "clarity": 9,
+        "edge_plausibility": 8,
+        "timing_catalyst": 7,
+        "risk_definition": 10,
+        "risk_management": 10,
+        "originality": 6,
+        "tradeability": 10
+      },
+      "best_argument_against": "In a market with strong underlying momentum, staying flat could mean missing out on asymmetric upside from equities, especially if uncertainty resolves positively post-earnings season.",
+      "one_flip_condition": "Would flip to LONG if major indices break to new highs on positive economic surprises, providing clearer bullish signals.",
+      "suggested_fix": "Define specific 'clearer signals' to watch for, such as key technical levels or data thresholds, to guide when to enter a position.",
+      "timestamp": "2026-01-21T02:19:45.461007",
+      "average_score": 8.57
+    },
+    {
+      "review_id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+      "pitch_label": "Pitch A",
+      "reviewer_model": "claude-3-7-sonnet",
+      "scores": {
+        "clarity": 5,
+        "edge_plausibility": 4,
+        "timing_catalyst": 3,
+        "risk_definition": 6,
+        "risk_management": 7,
+        "originality": 2,
+        "tradeability": 8
+      },
+      "best_argument_against": "The thesis relies on extremely generic momentum following with no differentiated edge. The 'technical breakout above 500' is arbitrary - round numbers are psychologically important but not fundamental catalysts. The Fed pause thesis contradicts Pitch B's view that hiking isn't done, suggesting no real conviction in macro analysis. With 1.5 conviction on a 1-week horizon, this is essentially a coin flip with no informational advantage.",
+      "one_flip_condition": "Would flip to SHORT if SPY fails to hold 500 on increased volume with a hawkish Fed statement indicating more rate hikes ahead, particularly if accompanied by weakening breadth indicators.",
+      "suggested_fix": "Identify a specific catalyst within the 1-week window (FOMC meeting, key economic data release, earnings concentration) and explain why the market is mispricing this event. Replace generic 'momentum' with specific technical setup (e.g., bullish divergence in breadth, options positioning skew) that provides actual edge.",
+      "timestamp": "2026-01-21T02:19:45.461142",
+      "average_score": 5.0
+    },
+    {
+      "review_id": "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
+      "pitch_label": "Pitch B",
+      "reviewer_model": "claude-3-7-sonnet",
+      "scores": {
+        "clarity": 6,
+        "edge_plausibility": 5,
+        "timing_catalyst": 4,
+        "risk_definition": 7,
+        "risk_management": 6,
+        "originality": 3,
+        "tradeability": 8
+      },
+      "best_argument_against": "The thesis assumes inflation persistence and continued Fed hiking, but provides no evidence the market hasn't already priced this in. TLT has already sold off significantly - shorting here could be late to the party. The 'technical breakdown' is mentioned but not specified. The risk/reward (2.5% stop vs 4% target) is poor for a short with borrowing costs. If the market already expects higher yields, where's the edge?",
+      "one_flip_condition": "Would flip to LONG if CPI prints below 3% with core inflation showing clear disinflation trend, particularly if accompanied by weakening labor market data suggesting Fed pivot is imminent.",
+      "suggested_fix": "Specify the exact technical breakdown level and explain why this specific CPI print will surprise to the upside when consensus expects X. Quantify the current market pricing of terminal rate vs your view. The conviction of 1.8 suggests strong belief, but the thesis needs hard data showing the market is positioned wrong on inflation trajectory.",
+      "timestamp": "2026-01-21T02:19:45.461151",
+      "average_score": 5.57
+    },
+    {
+      "review_id": "c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f",
+      "pitch_label": "Pitch C",
+      "reviewer_model": "claude-3-7-sonnet",
+      "scores": {
+        "clarity": 4,
+        "edge_plausibility": 3,
+        "timing_catalyst": 2,
+        "risk_definition": 5,
+        "risk_management": 5,
+        "originality": 2,
+        "tradeability": 7
+      },
+      "best_argument_against": "This is the weakest pitch of the set. 'Geopolitical tensions' and 'safe haven demand' are perpetually present - what specifically changed in the last 24 hours to justify entry now? The thesis contradicts itself: if safe haven demand is rising, why is conviction only 1.2? Gold has inverse correlation with real yields, yet no mention of rate expectations. The 3% stop with 6% target on a 1-week horizon for gold is unrealistic given GLD's typical volatility.",
+      "one_flip_condition": "Would flip to SHORT if the dollar rallies above key resistance (e.g., DXY 110) on Fed hawkishness while real yields spike above 2%, particularly if risk assets rally simultaneously indicating no safe haven bid.",
+      "suggested_fix": "Identify the specific geopolitical event or Fed policy shift happening within the 1-week window. Explain the current positioning in gold (COT data, ETF flows) and why it's wrong. Link dollar weakness to a specific driver (rate differential compression, intervention risk). Without a concrete catalyst in the next 7 days, this is just a directional bet with no timing edge.",
+      "timestamp": "2026-01-21T02:19:45.461158",
+      "average_score": 4.0
+    },
+    {
+      "review_id": "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a",
+      "pitch_label": "Pitch D",
+      "reviewer_model": "claude-3-7-sonnet",
+      "scores": {
+        "clarity": 8,
+        "edge_plausibility": 6,
+        "timing_catalyst": 5,
+        "risk_definition": 9,
+        "risk_management": 10,
+        "originality": 7,
+        "tradeability": 10
+      },
+      "best_argument_against": "While intellectually honest, staying FLAT is itself a position - you're short volatility and optionality. In fast-moving markets, waiting for 'clearer signals' means you'll enter late and pay up. The opportunity cost of sitting out could be significant if one of the other pitches is correct. Professional managers are paid to have views and manage risk, not to sit on hands. If uncertainty is too high, the answer might be smaller position sizing, not zero exposure.",
+      "one_flip_condition": "Would flip to LONG or SHORT if a clear catalyst emerges with asymmetric risk/reward - for example, unexpected Fed policy shift, major geopolitical event, or technical breakdown/breakout with strong confirming volume and breadth.",
+      "suggested_fix": "Define what 'clearer signals' means specifically - what data points, price levels, or events would trigger re-engagement? Consider expressing a view through options (limited risk) or smaller sizing rather than complete inaction. Alternatively, identify which of the three pitches has the best risk/reward and take a small position to maintain engagement with the market.",
+      "timestamp": "2026-01-21T02:19:45.461164",
+      "average_score": 7.86
+    },
+    {
+      "review_id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
+      "pitch_label": "Pitch A",
+      "reviewer_model": "ExpertTraderReviewer",
+      "scores": {
+        "clarity": 8,
+        "edge_plausibility": 7,
+        "timing_catalyst": 6,
+        "risk_definition": 9,
+        "risk_management": 8,
+        "originality": 5,
+        "tradeability": 7
+      },
+      "best_argument_against": "The Fed pause is already priced in, and any hawkish surprise could reverse the momentum.",
+      "one_flip_condition": "Would flip to SHORT if Fed unexpectedly hikes rates or signals further tightening.",
+      "suggested_fix": "Improve by incorporating more fundamental analysis, such as earnings reports or macroeconomic data, to strengthen the thesis.",
+      "timestamp": "2026-01-21T02:19:45.461280",
+      "average_score": 7.14
+    },
+    {
+      "review_id": "b2c3d4e5-f6g7-8901-hijk-lm0123456789",
+      "pitch_label": "Pitch B",
+      "reviewer_model": "ExpertTraderReviewer",
+      "scores": {
+        "clarity": 7,
+        "edge_plausibility": 8,
+        "timing_catalyst": 7,
+        "risk_definition": 8,
+        "risk_management": 7,
+        "originality": 6,
+        "tradeability": 8
+      },
+      "best_argument_against": "If CPI comes in softer than expected, it could lead to a rally in bonds, reversing the short position.",
+      "one_flip_condition": "Would flip to LONG if CPI data shows a significant drop in inflation.",
+      "suggested_fix": "Improve by adding more context on the current inflation trends and potential Fed responses to strengthen the thesis.",
+      "timestamp": "2026-01-21T02:19:45.461288",
+      "average_score": 7.29
+    },
+    {
+      "review_id": "c3d4e5f6-g7h8-9012-ijkl-mn0123456789",
+      "pitch_label": "Pitch C",
+      "reviewer_model": "ExpertTraderReviewer",
+      "scores": {
+        "clarity": 6,
+        "edge_plausibility": 7,
+        "timing_catalyst": 6,
+        "risk_definition": 7,
+        "risk_management": 7,
+        "originality": 5,
+        "tradeability": 7
+      },
+      "best_argument_against": "A strengthening dollar could undermine gold's appeal as a safe haven, leading to a decline in price.",
+      "one_flip_condition": "Would flip to SHORT if the dollar strengthens significantly due to hawkish Fed actions.",
+      "suggested_fix": "Improve by specifying which geopolitical tensions are driving safe haven demand and how they might evolve.",
+      "timestamp": "2026-01-21T02:19:45.461294",
+      "average_score": 6.43
+    },
+    {
+      "review_id": "d4e5f6g7-h8i9-0123-jklm-no0123456789",
+      "pitch_label": "Pitch D",
+      "reviewer_model": "ExpertTraderReviewer",
+      "scores": {
+        "clarity": 9,
+        "edge_plausibility": 8,
+        "timing_catalyst": 7,
+        "risk_definition": 9,
+        "risk_management": 8,
+        "originality": 7,
+        "tradeability": 9
+      },
+      "best_argument_against": "Inaction could lead to missed opportunities if clear signals emerge sooner than expected.",
+      "one_flip_condition": "Would flip to LONG or SHORT if a clear market signal or catalyst emerges within the week.",
+      "suggested_fix": "Improve by identifying specific signals or catalysts to watch for that would prompt action.",
+      "timestamp": "2026-01-21T02:19:45.461300",
+      "average_score": 8.14
+    }
+  ]
+}
