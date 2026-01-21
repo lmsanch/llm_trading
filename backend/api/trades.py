@@ -1,7 +1,7 @@
 """Trade execution API endpoints."""
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -17,12 +17,82 @@ router = APIRouter(prefix="/api/trades", tags=["trades"])
 trade_service = TradeService()
 
 
+# ============================================================================
+# Request Models
+# ============================================================================
+
+
 class ExecuteTradesRequest(BaseModel):
     """Request model for trade execution."""
 
     trade_ids: List[int] = Field(
         ...,
         description="List of trade IDs (pitch database IDs) to execute",
+    )
+
+
+# ============================================================================
+# Response Models
+# ============================================================================
+
+
+class PendingTrade(BaseModel):
+    """Response model for a single pending trade."""
+
+    id: int = Field(description="Trade identifier (pitch database ID)")
+    account: str = Field(description="Account name (e.g., 'COUNCIL', 'CHATGPT')")
+    symbol: str = Field(description="Trading instrument (e.g., 'SPY', 'TLT')")
+    direction: str = Field(description="Trade direction ('BUY' or 'SELL')")
+    qty: int = Field(description="Quantity of shares")
+    status: str = Field(description="Trade status ('pending')")
+    conviction: float = Field(description="Conviction score (0.0 to 1.0)")
+    entry_price: Optional[float] = Field(
+        default=None, description="Proposed entry price"
+    )
+    target_price: Optional[float] = Field(
+        default=None, description="Target price for take profit"
+    )
+    stop_price: Optional[float] = Field(default=None, description="Stop loss price")
+
+
+class TradeResult(BaseModel):
+    """Response model for a single trade execution result."""
+
+    trade_id: int = Field(description="Trade identifier (pitch database ID)")
+    status: str = Field(
+        description="Execution status ('submitted', 'error', or 'skipped')"
+    )
+    order_id: Optional[str] = Field(
+        default=None, description="Alpaca order ID (if submitted)"
+    )
+    symbol: Optional[str] = Field(
+        default=None, description="Trading instrument (if submitted)"
+    )
+    side: Optional[str] = Field(
+        default=None, description="Order side 'buy' or 'sell' (if submitted)"
+    )
+    qty: Optional[int] = Field(
+        default=None, description="Quantity of shares (if submitted)"
+    )
+    limit_price: Optional[float] = Field(
+        default=None, description="Entry limit price (if submitted)"
+    )
+    take_profit_price: Optional[float] = Field(
+        default=None, description="Take profit price (if submitted)"
+    )
+    stop_loss_price: Optional[float] = Field(
+        default=None, description="Stop loss price (if submitted)"
+    )
+    message: str = Field(description="Status or error message")
+
+
+class ExecuteTradesResponse(BaseModel):
+    """Response model for trade execution."""
+
+    status: str = Field(description="Overall status ('success' or 'error')")
+    message: str = Field(description="Summary message with counts")
+    results: List[TradeResult] = Field(
+        description="List of per-trade execution results"
     )
 
 
@@ -48,7 +118,7 @@ def get_pipeline_state():
 
 
 @router.get("/pending")
-async def get_pending_trades() -> List[Dict[str, Any]]:
+async def get_pending_trades() -> List[PendingTrade]:
     """
     Get pending trades from pipeline state.
 
@@ -106,7 +176,7 @@ async def get_pending_trades() -> List[Dict[str, Any]]:
 
 
 @router.post("/execute")
-async def execute_trades(request: ExecuteTradesRequest) -> Dict[str, Any]:
+async def execute_trades(request: ExecuteTradesRequest) -> ExecuteTradesResponse:
     """
     Execute trades using bracket orders.
 

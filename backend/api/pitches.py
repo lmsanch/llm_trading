@@ -44,6 +44,82 @@ class ApprovePitchRequest(BaseModel):
     pitch_id: int = Field(..., description="Database ID of the pitch to approve")
 
 
+# ============================================================================
+# Response Models
+# ============================================================================
+
+
+class PMPitch(BaseModel):
+    """PM pitch model."""
+
+    model: str = Field(description="Model name (e.g., 'gpt-4o', 'claude-3-5-sonnet-20241022')")
+    account: str = Field(description="Account name (e.g., 'paper')")
+    instrument: str = Field(description="Trading instrument (e.g., 'SPY', 'TLT')")
+    direction: str = Field(description="Trade direction ('LONG', 'SHORT', 'FLAT')")
+    conviction: float = Field(description="Conviction score (0.0 to 1.0)")
+    rationale: str = Field(description="Pitch rationale/reasoning")
+    entry_price: float = Field(description="Proposed entry price")
+    target_price: float = Field(description="Target price for take profit")
+    stop_price: float = Field(description="Stop loss price")
+    position_size: float = Field(description="Position size as fraction of portfolio")
+
+
+class CurrentPitchesResponse(BaseModel):
+    """Response model for current pitches."""
+
+    pitches: List[PMPitch] = Field(description="List of PM pitches")
+
+
+class ProgressInfo(BaseModel):
+    """Progress tracking information."""
+
+    status: str = Field(description="Status (running, complete, error)")
+    progress: int = Field(description="Progress percentage (0-100)")
+    message: str = Field(description="Status message")
+
+
+class GeneratePitchesResponse(BaseModel):
+    """Response model for pitch generation."""
+
+    job_id: str = Field(description="Unique identifier for this job")
+    status: str = Field(description="Job status (running, complete, error)")
+    started_at: str = Field(description="ISO timestamp when job started")
+    models: List[str] = Field(description="List of PM models being used")
+    progress: ProgressInfo = Field(description="Progress tracking information")
+
+
+class PitchStatusResponse(BaseModel):
+    """Response model for pitch status."""
+
+    job_id: str = Field(description="The job identifier")
+    status: str = Field(description="Current status (running, complete, error)")
+    started_at: str = Field(description="When the job started (ISO format)")
+    completed_at: Optional[str] = Field(
+        default=None, description="When the job completed (ISO format, if complete)"
+    )
+    models: List[str] = Field(description="List of PM models being used")
+    progress: ProgressInfo = Field(description="Progress tracking information")
+    results: Optional[List[Any]] = Field(
+        default=None, description="Formatted pitch results (only when status='complete')"
+    )
+    raw_pitches: Optional[List[Any]] = Field(
+        default=None, description="Raw pitch data (only when status='complete')"
+    )
+    error: Optional[str] = Field(
+        default=None, description="Error message (only when status='error')"
+    )
+
+
+class ApprovePitchResponse(BaseModel):
+    """Response model for pitch approval."""
+
+    status: str = Field(description="Status ('success' or 'error')")
+    message: str = Field(description="Confirmation or error message")
+    pitch: Optional[Dict[str, Any]] = Field(
+        default=None, description="The approved pitch data (if found)"
+    )
+
+
 # Mock data fallback (for when pipeline_state has no data)
 MOCK_PM_PITCHES = [
     {
@@ -98,7 +174,7 @@ def get_pipeline_state():
 async def get_current_pitches(
     week_id: Optional[str] = None,
     research_date: Optional[str] = None
-) -> List[Dict[str, Any]]:
+) -> CurrentPitchesResponse:
     """
     Get current PM pitches from database or pipeline state.
 
@@ -150,16 +226,16 @@ async def get_current_pitches(
         )
 
         if pitches:
-            return pitches
+            return CurrentPitchesResponse(pitches=pitches)
 
         # Fallback to pipeline state
         pipeline_state = get_pipeline_state()
         if pipeline_state and pipeline_state.pm_pitches:
-            return pipeline_state.pm_pitches
+            return CurrentPitchesResponse(pitches=pipeline_state.pm_pitches)
 
         # Fallback to mock data for frontend development
         logger.info("No pitches found, returning mock data")
-        return MOCK_PM_PITCHES
+        return CurrentPitchesResponse(pitches=MOCK_PM_PITCHES)
 
     except Exception as e:
         logger.error(f"Error in get_current_pitches endpoint: {e}", exc_info=True)
@@ -170,7 +246,7 @@ async def get_current_pitches(
 async def generate_pitches(
     background_tasks: BackgroundTasks,
     request: GeneratePitchesRequest = GeneratePitchesRequest(),
-) -> Dict[str, Any]:
+) -> GeneratePitchesResponse:
     """
     Generate new PM pitches using AI models.
 
@@ -256,7 +332,17 @@ async def generate_pitches(
             )
         )
 
-        return job_status
+        return GeneratePitchesResponse(
+            job_id=job_id,
+            status="running",
+            started_at=datetime.utcnow().isoformat(),
+            models=request.models,
+            progress=ProgressInfo(
+                status="running",
+                progress=10,
+                message="Initializing PM pitch generation..."
+            )
+        )
 
     except HTTPException:
         raise
@@ -266,7 +352,7 @@ async def generate_pitches(
 
 
 @router.get("/status")
-async def get_pitches_status(job_id: str) -> Dict[str, Any]:
+async def get_pitches_status(job_id: str) -> PitchStatusResponse:
     """
     Poll status of a pitch generation job.
 
@@ -321,7 +407,18 @@ async def get_pitches_status(job_id: str) -> Dict[str, Any]:
             logger.warning(f"Job not found: {job_id}")
             raise HTTPException(status_code=404, detail="Job not found")
 
-        return pipeline_state.jobs[job_id]
+        job_data = pipeline_state.jobs[job_id]
+        return PitchStatusResponse(
+            job_id=job_data.get("job_id", job_id),
+            status=job_data.get("status", "unknown"),
+            started_at=job_data.get("started_at", ""),
+            completed_at=job_data.get("completed_at"),
+            models=job_data.get("models", []),
+            progress=ProgressInfo(**job_data.get("progress", {"status": "unknown", "progress": 0, "message": ""})),
+            results=job_data.get("results"),
+            raw_pitches=job_data.get("raw_pitches"),
+            error=job_data.get("error")
+        )
 
     except HTTPException:
         raise
@@ -331,7 +428,7 @@ async def get_pitches_status(job_id: str) -> Dict[str, Any]:
 
 
 @router.post("/{id}/approve")
-async def approve_pitch(id: int) -> Dict[str, Any]:
+async def approve_pitch(id: int) -> ApprovePitchResponse:
     """
     Approve a specific PM pitch for trading.
 
@@ -380,7 +477,11 @@ async def approve_pitch(id: int) -> Dict[str, Any]:
             else:
                 raise HTTPException(status_code=500, detail=result["message"])
 
-        return result
+        return ApprovePitchResponse(
+            status=result.get("status", "error"),
+            message=result.get("message", ""),
+            pitch=result.get("pitch")
+        )
 
     except HTTPException:
         raise

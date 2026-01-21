@@ -1,7 +1,7 @@
 """Research API endpoints."""
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 from datetime import datetime
 
@@ -19,6 +19,11 @@ router = APIRouter(prefix="/api/research", tags=["research"])
 research_service = ResearchService()
 
 
+# ============================================================================
+# Request Models
+# ============================================================================
+
+
 class GenerateResearchRequest(BaseModel):
     """Request model for research generation."""
 
@@ -29,6 +34,221 @@ class GenerateResearchRequest(BaseModel):
     )
     prompt_override: Optional[str] = Field(
         default=None, description="Optional custom prompt to override the default"
+    )
+
+
+# ============================================================================
+# Response Models
+# ============================================================================
+
+
+class ResearchPromptResponse(BaseModel):
+    """Response model for research prompt."""
+
+    prompt: str = Field(description="The prompt content as a string")
+    version: str = Field(description="Prompt version (e.g., '1.1')")
+    last_updated: str = Field(description="ISO timestamp of last modification")
+    instruments: List[str] = Field(description="List of tracked instruments (10 ETFs)")
+    horizon: str = Field(description="Trading horizon (7 DAYS ONLY)")
+
+
+class MacroRegime(BaseModel):
+    """Macro regime information."""
+
+    risk_mode: str = Field(description="Risk mode (RISK_ON, RISK_OFF, NEUTRAL)")
+    description: str = Field(description="Description of the macro regime")
+
+
+class TradableCandidate(BaseModel):
+    """Tradable candidate with ticker and rationale."""
+
+    ticker: str = Field(description="Stock ticker symbol")
+    rationale: str = Field(description="Rationale for the trade")
+
+
+class EventCalendarItem(BaseModel):
+    """Event calendar item."""
+
+    date: str = Field(description="Event date (YYYY-MM-DD)")
+    event: str = Field(description="Event description")
+    impact: str = Field(description="Impact level (HIGH, MEDIUM, LOW, CRITICAL)")
+
+
+class ResearchPack(BaseModel):
+    """Research pack from a single provider."""
+
+    source: str = Field(description="Research provider (perplexity, gemini)")
+    model: str = Field(description="Model used for research")
+    macro_regime: MacroRegime = Field(description="Macro regime information")
+    top_narratives: List[str] = Field(description="List of top market narratives")
+    tradable_candidates: List[TradableCandidate] = Field(
+        description="List of tradable candidates"
+    )
+    event_calendar: List[EventCalendarItem] = Field(description="Event calendar items")
+
+
+class CurrentResearchResponse(BaseModel):
+    """Response model for current research packs."""
+
+    perplexity: Optional[ResearchPack] = Field(
+        default=None, description="Research pack from Perplexity model"
+    )
+    gemini: Optional[ResearchPack] = Field(
+        default=None, description="Research pack from Gemini model"
+    )
+
+
+class LatestResearchResponse(BaseModel):
+    """Response model for latest research report."""
+
+    id: Optional[str] = Field(default=None, description="Research report UUID")
+    week_id: Optional[str] = Field(
+        default=None, description="Week identifier (e.g., '2024-W02')"
+    )
+    provider: Optional[str] = Field(
+        default=None, description="Research provider (perplexity, gemini)"
+    )
+    model: Optional[str] = Field(default=None, description="Model used for research")
+    natural_language: Optional[str] = Field(
+        default=None, description="Natural language summary"
+    )
+    structured_json: Optional[Dict[str, Any]] = Field(
+        default=None, description="Structured JSON data with graphs and analysis"
+    )
+    status: Optional[str] = Field(
+        default=None, description="Report status (complete, error, etc.)"
+    )
+    error_message: Optional[str] = Field(
+        default=None, description="Error message if any"
+    )
+    created_at: Optional[str] = Field(
+        default=None, description="Creation timestamp (ISO format)"
+    )
+
+
+class ModelProgress(BaseModel):
+    """Progress tracking for a single model."""
+
+    status: str = Field(description="Status (running, complete, error)")
+    progress: int = Field(description="Progress percentage (0-100)")
+    message: str = Field(description="Status message")
+
+
+class GenerateResearchResponse(BaseModel):
+    """Response model for research generation."""
+
+    job_id: str = Field(description="Unique identifier for this job")
+    status: str = Field(description="Job status (running, complete, error)")
+    started_at: str = Field(description="ISO timestamp when job started")
+    models: List[str] = Field(description="List of models being used")
+    perplexity: Optional[ModelProgress] = Field(
+        default=None, description="Progress tracking for Perplexity model"
+    )
+    gemini: Optional[ModelProgress] = Field(
+        default=None, description="Progress tracking for Gemini model"
+    )
+
+
+class ResearchStatusResponse(BaseModel):
+    """Response model for research status."""
+
+    job_id: str = Field(description="The job identifier")
+    status: str = Field(description="Current status (running, complete, error)")
+    started_at: str = Field(description="When the job started (ISO format)")
+    completed_at: Optional[str] = Field(
+        default=None, description="When the job completed (ISO format, if complete)"
+    )
+    models: List[str] = Field(description="List of models being used")
+    perplexity: Optional[ModelProgress] = Field(
+        default=None, description="Progress tracking for Perplexity model"
+    )
+    gemini: Optional[ModelProgress] = Field(
+        default=None, description="Progress tracking for Gemini model"
+    )
+    results: Optional[Dict[str, Any]] = Field(
+        default=None, description="Research results (only when status='complete')"
+    )
+    error: Optional[str] = Field(
+        default=None, description="Error message (only when status='error')"
+    )
+
+
+class ProviderInfo(BaseModel):
+    """Provider information for history."""
+
+    name: str = Field(description="Provider name")
+    count: int = Field(description="Number of reports")
+    report_ids: List[str] = Field(description="List of report UUIDs")
+    statuses: List[str] = Field(description="List of report statuses")
+
+
+class DayHistory(BaseModel):
+    """History for a single day."""
+
+    providers: List[ProviderInfo] = Field(description="List of providers for this day")
+    total: int = Field(description="Total number of reports")
+
+
+class ResearchHistoryResponse(BaseModel):
+    """Response model for research history."""
+
+    history: Dict[str, DayHistory] = Field(
+        description="Dict keyed by date string (YYYY-MM-DD) with provider data"
+    )
+    days: int = Field(description="Number of days queried")
+    error: Optional[str] = Field(
+        default=None, description="Error message if query failed"
+    )
+
+
+class VerifyResearchResponse(BaseModel):
+    """Response model for verify research."""
+
+    status: str = Field(description="Status (success)")
+    message: str = Field(description="Confirmation message")
+
+
+class ResearchReportResponse(BaseModel):
+    """Response model for research report."""
+
+    id: str = Field(description="Research report UUID")
+    week_id: str = Field(description="Week identifier")
+    provider: str = Field(description="Research provider")
+    model: str = Field(description="Model used")
+    natural_language: Optional[str] = Field(
+        default=None, description="Natural language summary"
+    )
+    structured_json: Optional[Dict[str, Any]] = Field(
+        default=None, description="Structured data"
+    )
+    status: str = Field(description="Report status")
+    error_message: Optional[str] = Field(default=None, description="Error message if any")
+    created_at: str = Field(description="Creation timestamp")
+
+
+class LatestGraphsResponse(BaseModel):
+    """Response model for latest graphs."""
+
+    date: Optional[str] = Field(
+        default=None, description="Creation timestamp of the research"
+    )
+    weekly_graph: Optional[Dict[str, Any]] = Field(
+        default=None, description="Weekly knowledge graph from structured_json"
+    )
+
+
+class LatestDataPackageResponse(BaseModel):
+    """Response model for latest data package."""
+
+    date: Optional[str] = Field(default=None, description="Most recent data date (ISO format)")
+    research: Optional[Dict[str, Any]] = Field(
+        default=None, description="Latest complete research report"
+    )
+    market_metrics: Optional[Dict[str, Any]] = Field(
+        default=None, description="Latest 7-day returns and correlation matrix"
+    )
+    current_prices: Optional[Dict[str, Any]] = Field(
+        default=None, description="Latest OHLCV data for tracked symbols"
     )
 
 
@@ -103,7 +323,7 @@ def get_pipeline_state():
 
 
 @router.get("/prompt")
-async def get_research_prompt() -> Dict[str, Any]:
+async def get_research_prompt() -> ResearchPromptResponse:
     """
     Get the current research prompt for review.
 
@@ -142,7 +362,7 @@ async def get_research_prompt() -> Dict[str, Any]:
 
 
 @router.get("/current")
-async def get_current_research() -> Dict[str, Any]:
+async def get_current_research() -> CurrentResearchResponse:
     """
     Get current research packs from pipeline state.
 
@@ -182,7 +402,7 @@ async def get_current_research() -> Dict[str, Any]:
 
 
 @router.get("/latest")
-async def get_latest_research() -> Dict[str, Any]:
+async def get_latest_research() -> LatestResearchResponse:
     """
     Get the latest complete research report from database.
 
@@ -230,7 +450,7 @@ async def get_latest_research() -> Dict[str, Any]:
 async def generate_research(
     background_tasks: BackgroundTasks,
     request: GenerateResearchRequest = GenerateResearchRequest(),
-) -> Dict[str, Any]:
+) -> GenerateResearchResponse:
     """
     Generate new research packs using AI models.
 
@@ -334,7 +554,7 @@ async def generate_research(
 
 
 @router.get("/status")
-async def get_research_status(job_id: str) -> Dict[str, Any]:
+async def get_research_status(job_id: str) -> ResearchStatusResponse:
     """
     Poll status of a research generation job.
 
@@ -396,7 +616,7 @@ async def get_research_status(job_id: str) -> Dict[str, Any]:
 
 
 @router.get("/history")
-async def get_research_history(days: int = 90) -> Dict[str, Any]:
+async def get_research_history(days: int = 90) -> ResearchHistoryResponse:
     """
     Get research history for calendar widget.
 
@@ -442,7 +662,7 @@ async def get_research_history(days: int = 90) -> Dict[str, Any]:
 
 
 @router.get("/{job_id}")
-async def get_research_results(job_id: str) -> Dict[str, Any]:
+async def get_research_results(job_id: str) -> CurrentResearchResponse:
     """
     Get final results of a completed research job.
 
@@ -503,7 +723,7 @@ async def get_research_results(job_id: str) -> Dict[str, Any]:
 
 
 @router.post("/verify")
-async def verify_research(data: Dict[str, Any]) -> Dict[str, Any]:
+async def verify_research(data: Dict[str, Any]) -> VerifyResearchResponse:
     """
     Mark research as verified by human.
 
@@ -553,7 +773,7 @@ async def verify_research(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.get("/report/{report_id}")
-async def get_research_report(report_id: str) -> Dict[str, Any]:
+async def get_research_report(report_id: str) -> ResearchReportResponse:
     """
     Get a specific research report by ID.
 
@@ -610,7 +830,7 @@ graphs_router = APIRouter(prefix="/api/graphs", tags=["graphs"])
 
 
 @graphs_router.get("/latest")
-async def get_latest_graphs() -> Dict[str, Any]:
+async def get_latest_graphs() -> LatestGraphsResponse:
     """
     Get the latest knowledge graphs from database.
 
@@ -650,7 +870,7 @@ data_package_router = APIRouter(prefix="/api/data-package", tags=["data-package"
 
 
 @data_package_router.get("/latest")
-async def get_latest_data_package() -> Dict[str, Any]:
+async def get_latest_data_package() -> LatestDataPackageResponse:
     """
     Get the latest complete data package.
 

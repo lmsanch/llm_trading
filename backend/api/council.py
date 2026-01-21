@@ -19,6 +19,11 @@ router = APIRouter(prefix="/api/council", tags=["council"])
 council_service = CouncilService()
 
 
+# ============================================================================
+# Request Models
+# ============================================================================
+
+
 class SynthesizeCouncilRequest(BaseModel):
     """Request model for council synthesis."""
 
@@ -36,6 +41,56 @@ class SynthesizeCouncilRequest(BaseModel):
     research_date: Optional[str] = Field(
         default=None, description="ISO format research date"
     )
+
+
+# ============================================================================
+# Response Models
+# ============================================================================
+
+
+class PeerReviewSummary(BaseModel):
+    """Peer review summary for a single pitch."""
+
+    reviewer: str = Field(description="Model name of the reviewer")
+    pitch_reviewed: str = Field(description="Pitch label (e.g., 'Pitch A')")
+    score: float = Field(description="Review score")
+    key_points: List[str] = Field(description="List of key review points")
+
+
+class CouncilDecisionResponse(BaseModel):
+    """Response model for council decision."""
+
+    selected_pitch: Optional[str] = Field(
+        default=None, description="The pitch label selected by the chairman"
+    )
+    reasoning: Optional[str] = Field(
+        default=None, description="Chairman's reasoning for the selection"
+    )
+    model: Optional[str] = Field(
+        default=None, description="Model name of the selected pitch"
+    )
+    instrument: Optional[str] = Field(
+        default=None, description="Trading instrument (e.g., 'SPY')"
+    )
+    direction: Optional[str] = Field(
+        default=None, description="Trade direction (LONG, SHORT, FLAT)"
+    )
+    conviction: Optional[float] = Field(
+        default=None, description="Conviction score (0.0 to 1.0)"
+    )
+    peer_reviews_summary: Optional[List[PeerReviewSummary]] = Field(
+        default=None, description="List of peer review summaries"
+    )
+
+
+class SynthesizeCouncilResponse(BaseModel):
+    """Response model for council synthesis."""
+
+    status: str = Field(
+        description="Job status (synthesizing, complete, error)"
+    )
+    message: str = Field(description="Status message")
+    job_id: str = Field(description="Unique identifier for this job")
 
 
 # Mock data fallback (for when pipeline_state has no data)
@@ -85,7 +140,7 @@ def get_pipeline_state():
 
 
 @router.get("/current")
-async def get_council_decision() -> Dict[str, Any]:
+async def get_council_decision() -> CouncilDecisionResponse:
     """
     Get current council decision from pipeline state.
 
@@ -122,23 +177,23 @@ async def get_council_decision() -> Dict[str, Any]:
         if pipeline_state:
             decision = council_service.get_council_decision(pipeline_state)
             if decision:
-                return decision
+                return CouncilDecisionResponse(**decision)
 
         # Fallback to mock data for frontend development
         logger.info("No council decision found, returning mock data")
-        return MOCK_COUNCIL_DECISION
+        return CouncilDecisionResponse(**MOCK_COUNCIL_DECISION)
 
     except Exception as e:
         logger.error(f"Error in get_council_decision endpoint: {e}", exc_info=True)
-        # Return empty dict on error (don't raise, so frontend doesn't break)
-        return {}
+        # Return empty response on error (don't raise, so frontend doesn't break)
+        return CouncilDecisionResponse()
 
 
 @router.post("/synthesize")
 async def synthesize_council(
     background_tasks: BackgroundTasks,
     request: SynthesizeCouncilRequest = SynthesizeCouncilRequest(),
-) -> Dict[str, Any]:
+) -> SynthesizeCouncilResponse:
     """
     Synthesize council decision through peer review and chairman stages.
 
@@ -268,11 +323,11 @@ async def synthesize_council(
         # Start background task
         background_tasks.add_task(run_council)
 
-        return {
-            "status": "synthesizing",
-            "message": "Council peer review and chairman synthesis started",
-            "job_id": job_id,
-        }
+        return SynthesizeCouncilResponse(
+            status="synthesizing",
+            message="Council peer review and chairman synthesis started",
+            job_id=job_id,
+        )
 
     except HTTPException:
         raise

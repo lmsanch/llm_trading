@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, List
 
 from fastapi import APIRouter
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +74,40 @@ MOCK_ACCOUNTS = [
 ]
 
 
+# ============================================================================
+# Response Models
+# ============================================================================
+
+
+class PositionItem(BaseModel):
+    """Response model for a single position."""
+
+    account: str = Field(description="Account name (e.g., 'COUNCIL', 'CHATGPT')")
+    symbol: str = Field(description="Trading instrument (e.g., 'SPY', 'TLT', '-')")
+    qty: int = Field(description="Quantity of shares held")
+    avg_price: float = Field(description="Average entry price per share")
+    current_price: float = Field(description="Current market price per share")
+    pl: float = Field(description="Unrealized profit/loss in dollars")
+
+
+class AccountSummary(BaseModel):
+    """Response model for account summary."""
+
+    name: str = Field(description="Account name (e.g., 'COUNCIL', 'CHATGPT')")
+    equity: float = Field(description="Total portfolio value (cash + positions)")
+    cash: float = Field(description="Available cash balance")
+    pl: float = Field(
+        description="Profit/loss relative to starting balance ($100,000)"
+    )
+
+
+# ============================================================================
+# Endpoints
+# ============================================================================
+
+
 @router.get("/positions")
-async def get_positions() -> List[Dict[str, Any]]:
+async def get_positions() -> List[PositionItem]:
     """
     Get current positions across all trading accounts.
 
@@ -167,7 +200,7 @@ async def get_positions() -> List[Dict[str, Any]]:
 
 
 @router.get("/accounts")
-async def get_accounts() -> List[Dict[str, Any]]:
+async def get_accounts() -> List[AccountSummary]:
     """
     Get account summaries for all trading accounts.
 
