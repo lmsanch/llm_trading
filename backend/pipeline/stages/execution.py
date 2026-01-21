@@ -6,9 +6,11 @@ from datetime import datetime
 
 from ...multi_alpaca_client import MultiAlpacaManager
 from ...requesty_client import REQUESTY_MODELS
+from ...db.execution_db import log_execution_event
 from ..context import PipelineContext, ContextKey
 from ..base import Stage
 from .chairman import CHAIRMAN_DECISION, PM_PITCHES
+from .research import get_week_id
 
 
 # Context keys for execution
@@ -152,6 +154,7 @@ class ExecutionStage(Stage):
         # Skip DEEPSEEK baseline account (should remain flat for comparison)
         if account == "DEEPSEEK":
             print(f"  ⚠️  Skipping DEEPSEEK baseline account (must remain flat)")
+            # Note: Event logging will be done asynchronously in execute() if needed
             return None
 
         # Get position size based on conviction
@@ -211,8 +214,27 @@ class ExecutionStage(Stage):
         Returns:
             List of execution result dicts
         """
+        # Get week_id for event logging
+        week_id = get_week_id()
+
         # Filter out DEEPSEEK baseline account (defensive check)
+        deepseek_trades = [t for t in trades if t.get("account") == "DEEPSEEK"]
         trades = [t for t in trades if t.get("account") != "DEEPSEEK"]
+
+        # Log baseline account skip if any DEEPSEEK trades were filtered
+        for trade in deepseek_trades:
+            await log_execution_event(
+                week_id=week_id,
+                event_type="baseline_account_skipped",
+                account="DEEPSEEK",
+                event_data={
+                    "trade_id": trade["trade_id"],
+                    "symbol": trade["instrument"],
+                    "direction": trade["direction"],
+                    "reason": "DEEPSEEK is baseline account - must remain flat",
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+            )
 
         if not trades:
             print("  ⚠️  No trades to execute after filtering baseline accounts")
@@ -229,15 +251,52 @@ class ExecutionStage(Stage):
                 "order_type": "market",
                 "time_in_force": "day"
             })
-        
+
         # Place orders in parallel
         manager = MultiAlpacaManager()
         order_responses = await manager.place_orders_parallel(orders)
-        
-        # Process results
+
+        # Process results and log events
         results = []
         for trade, order_response in zip(trades, order_responses.values()):
             success = "order_id" in order_response
+
+            # Log execution event
+            if success:
+                await log_execution_event(
+                    week_id=week_id,
+                    event_type="order_placed",
+                    account=trade["account"],
+                    event_data={
+                        "trade_id": trade["trade_id"],
+                        "symbol": trade["instrument"],
+                        "side": trade["side"],
+                        "qty": trade["qty"],
+                        "order_id": order_response.get("id"),
+                        "direction": trade["direction"],
+                        "conviction": trade["conviction"],
+                        "source": trade["source"],
+                        "timestamp": datetime.utcnow().isoformat(),
+                    },
+                )
+            else:
+                await log_execution_event(
+                    week_id=week_id,
+                    event_type="order_failed",
+                    account=trade["account"],
+                    event_data={
+                        "trade_id": trade["trade_id"],
+                        "symbol": trade["instrument"],
+                        "side": trade["side"],
+                        "qty": trade["qty"],
+                        "error": str(order_response),
+                        "direction": trade["direction"],
+                        "conviction": trade["conviction"],
+                        "source": trade["source"],
+                        "timestamp": datetime.utcnow().isoformat(),
+                    },
+                )
+
             results.append({
                 "trade_id": trade["trade_id"],
                 "account": trade["account"],
@@ -254,7 +313,7 @@ class ExecutionStage(Stage):
                 "message": order_response.get("message", "Order placed") if success else str(order_response),
                 "timestamp": datetime.utcnow().isoformat()
             })
-        
+
         return results
     
     def calculate_position_size(
