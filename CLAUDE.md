@@ -697,6 +697,21 @@ Used via MCP tools (not raw HTTP):
 - Position / account state
 - Paper order placement
 
+### Multi-Account Alpaca Trading
+
+Manages 6 parallel paper trading accounts for strategy comparison. See [docs/ALPACA_MULTI_ACCOUNT.md](docs/ALPACA_MULTI_ACCOUNT.md) for complete details.
+
+**Key Features:**
+- Independent paper trading accounts per strategy
+- Isolated portfolio tracking
+- Parallel order execution across accounts
+- Per-account P&L and performance metrics
+
+**Account Configuration:**
+- Individual PM accounts (GPT-5.1, Gemini 3 Pro, Sonnet 4.5, Grok)
+- Council synthesis account (Chairman decisions)
+- Baseline account (FLAT / no trades)
+
 ### Research Providers
 
 - **Gemini Deep Research:** Research Pack A
