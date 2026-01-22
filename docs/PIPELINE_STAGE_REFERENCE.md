@@ -1796,28 +1796,311 @@ await execute(
 
 #### ExecutionStage
 
-**Purpose:** Execute trades via Alpaca paper trading accounts
+**Purpose:** Execute approved trades in parallel across multiple Alpaca paper trading accounts
 
-**Parameters:**
-- `account_configs`: Configuration for all 6 paper trading accounts
-- `mcp_client`: Alpaca MCP client for order placement
-- `dry_run`: Simulate execution without placing orders (default: false)
+**Overview:**
+
+`ExecutionStage` is the final stage in the weekly trading pipeline, responsible for translating trading decisions into actual market orders. This stage handles both the council's synthesized decision and individual PM trades, executing them across multiple paper trading accounts for performance comparison.
+
+The stage performs four key operations:
+1. **Trade Collection:** Gathers council trade + individual PM trades
+2. **Approval Check:** Verifies trades have been approved via GUI
+3. **Parallel Execution:** Places orders simultaneously across all accounts
+4. **Event Logging:** Records execution results in PostgreSQL database
+
+**Constructor Parameters:**
+
+None. The stage uses `MultiAlpacaManager` internally to handle multi-account order placement.
+
+```python
+# No configuration needed - accounts are managed by MultiAlpacaManager
+stage = ExecutionStage()
+```
 
 **Context Keys:**
-- Input: `CHAIRMAN_DECISION` (dict), `RISK_ASSESSMENT` (dict)
-- Output: `EXECUTION_RESULT` (dict) - Order confirmations and execution status
+
+*Input:*
+- `CHAIRMAN_DECISION` (dict) - Chairman's synthesized trading decision for council account
+- `PM_PITCHES` (list[dict]) - Individual PM trade pitches for comparison accounts
+
+*Output:*
+- `EXECUTION_RESULT` (dict) - Execution results containing:
+  - `executed` (bool) - Whether any trades were executed
+  - `trades` (list[dict]) - List of execution results per account
+  - `message` (str) - Summary message
 
 **Execution Result Schema:**
+
+The `EXECUTION_RESULT` context key contains:
+
 ```json
 {
-  "orders_placed": 6,
-  "successful": 5,
-  "failed": 1,
-  "order_ids": ["...", "..."],
-  "errors": [...],
-  "timestamp": "ISO8601"
+  "executed": true,
+  "trades": [
+    {
+      "trade_id": "uuid",
+      "account": "COUNCIL",
+      "alpaca_id": "PK...",
+      "model": "anthropic/claude-opus-4",
+      "source": "council",
+      "instrument": "SPY",
+      "direction": "LONG",
+      "qty": 50000,
+      "position_size": 0.50,
+      "conviction": 1.0,
+      "success": true,
+      "order_id": "alpaca-order-id",
+      "message": "Order placed",
+      "timestamp": "2025-01-22T12:00:00Z"
+    },
+    {
+      "trade_id": "uuid",
+      "account": "SONNET",
+      "alpaca_id": "PK...",
+      "model": "anthropic/claude-sonnet-4.5",
+      "source": "anthropic/claude-sonnet-4.5",
+      "instrument": "QQQ",
+      "direction": "SHORT",
+      "qty": 25000,
+      "position_size": 0.25,
+      "conviction": -1.5,
+      "success": false,
+      "order_id": null,
+      "message": "Insufficient buying power",
+      "timestamp": "2025-01-22T12:00:00Z"
+    }
+  ],
+  "message": "Executed 5 trades"
 }
 ```
+
+**Position Sizing Rules:**
+
+ExecutionStage uses a conviction-based position sizing system that maps conviction scores to portfolio allocation percentages:
+
+| Conviction | Position Size | Direction | Description |
+|-----------|--------------|-----------|-------------|
+| +2.0 | 10% | LONG | Very strong conviction (inversely small position) |
+| +1.5 | 25% | LONG | Strong conviction (small position) |
+| +1.0 | 50% | LONG | Medium conviction (medium position) |
+| +0.5 | 75% | LONG | Weak conviction (large position) |
+| 0.0 | 0% | FLAT | No position (no trade executed) |
+| -0.5 | 75% | SHORT | Weak short conviction |
+| -1.0 | 50% | SHORT | Medium short conviction |
+| -1.5 | 25% | SHORT | Strong short conviction |
+| -2.0 | 0% | SHORT | Very strong short conviction (no position) |
+
+**Rationale:** The inverse relationship (higher conviction = smaller position) implements a risk management principle: high conviction trades carry higher tail risk, so position size is reduced. This prevents overconcentration in "obvious" trades that may have hidden risks.
+
+**Position Size Calculation:**
+
+```python
+# Assume $100,000 paper trading account
+portfolio_value = 100000
+
+# Get position size percentage from conviction
+position_size = POSITION_SIZING.get(conviction, 0.0)
+
+# Calculate shares to buy/sell
+qty = int(portfolio_value * position_size)  # e.g., $100k * 0.50 = $50k worth
+```
+
+**Approval Workflow:**
+
+ExecutionStage implements a **two-stage safety mechanism** to prevent accidental trade execution:
+
+1. **Stage 1: Trade Preparation**
+   - Pipeline generates trading decisions (ChairmanStage + PM pitches)
+   - Trades are prepared with `approved: False` flag
+   - System displays trades in GUI for review
+
+2. **Stage 2: Manual Approval**
+   - User reviews trades in GUI dashboard
+   - User clicks "Approve" button for each trade
+   - Database updates `approved: True` flag
+
+3. **Stage 3: Execution**
+   - ExecutionStage filters for `approved: True` trades only
+   - If no approved trades, stage returns early with message: "Trades not approved yet"
+   - Only approved trades are sent to Alpaca
+
+**Why This Matters:**
+- Prevents accidental execution during testing/development
+- Allows manual review of AI-generated decisions
+- Enables selective approval (approve council trade, skip individual PMs)
+- Provides audit trail (who approved, when)
+
+**Special Cases:**
+
+1. **DEEPSEEK Baseline Account:**
+   - DEEPSEEK account is a **flat baseline** for performance comparison
+   - ExecutionStage **always skips** DEEPSEEK trades (even if approved)
+   - Logs `baseline_account_skipped` event to database
+   - Rationale: Baseline account must remain flat to measure alpha of other strategies
+
+2. **FLAT Trades (Conviction = 0.0):**
+   - Trades with `direction: "FLAT"` and `conviction: 0` are not executed
+   - No order placement needed (staying in cash is not an "order")
+   - Stage skips these trades silently
+
+3. **Failed Orders:**
+   - If Alpaca rejects an order (insufficient buying power, market closed, etc.)
+   - Stage logs `order_failed` event with error details
+   - Stage continues executing other trades (partial success)
+   - Does NOT crash pipeline or retry automatically
+
+**Error Handling:**
+
+The stage is designed to never crash the pipeline:
+
+1. **Missing Chairman Decision:**
+   - Returns original context unchanged
+   - Prints: "❌ Error: Chairman decision not found in context"
+   - Downstream stages should check for EXECUTION_RESULT presence
+
+2. **No Trades to Execute (All FLAT):**
+   - Returns context with `EXECUTION_RESULT = {executed: False, trades: [], message: "No trades to execute"}`
+   - This is **not an error** - staying flat is a valid decision
+
+3. **No Approved Trades:**
+   - Returns context with `EXECUTION_RESULT = {executed: False, trades: [], message: "Trades not approved yet"}`
+   - User must approve trades via GUI before re-running pipeline
+
+4. **Alpaca API Errors:**
+   - Stage catches errors per account and continues
+   - Failed trades have `success: False` and error message in result
+   - Successful trades in same batch still execute (partial success)
+
+5. **Database Logging Failures:**
+   - Event logging happens asynchronously via `log_execution_event()`
+   - If logging fails, execution still completes (logging is non-critical)
+   - Errors logged to console but do not block order placement
+
+**Configuration Example:**
+
+```python
+from backend.pipeline.stages.execution import ExecutionStage, EXECUTION_RESULT
+from backend.pipeline.stages.chairman import CHAIRMAN_DECISION, PM_PITCHES
+
+# Create execution stage (no parameters needed)
+execution_stage = ExecutionStage()
+
+# Execute stage (requires chairman decision + PM pitches in context)
+context = await execution_stage.execute(context)
+
+# Access results
+execution_result = context.get(EXECUTION_RESULT)
+
+if execution_result.get("executed"):
+    print(f"✅ {execution_result['message']}")
+    for trade in execution_result["trades"]:
+        if trade["success"]:
+            print(f"  ✅ {trade['account']}: {trade['instrument']} {trade['direction']} (qty: {trade['qty']})")
+        else:
+            print(f"  ❌ {trade['account']}: {trade['message']}")
+else:
+    print(f"⚠️  {execution_result['message']}")
+```
+
+**Parallel Execution:**
+
+ExecutionStage uses `MultiAlpacaManager.place_orders_parallel()` to submit orders simultaneously across all accounts:
+
+```python
+# Prepare orders for all accounts
+orders = [
+    {"account_name": "COUNCIL", "symbol": "SPY", "qty": 50000, "side": "buy", "order_type": "market", "time_in_force": "day"},
+    {"account_name": "SONNET", "symbol": "QQQ", "qty": 25000, "side": "sell", "order_type": "market", "time_in_force": "day"},
+    # ... more accounts
+]
+
+# Execute in parallel (concurrent API calls)
+manager = MultiAlpacaManager()
+results = await manager.place_orders_parallel(orders)
+```
+
+**Performance:** ~200-500ms total for 5 accounts (vs ~1-2s if executed sequentially)
+
+**Database Persistence:**
+
+ExecutionStage automatically logs all execution events to PostgreSQL:
+
+**Event Types:**
+- `order_placed` - Successful order placement
+- `order_failed` - Failed order placement
+- `baseline_account_skipped` - DEEPSEEK account trade skipped
+
+**Event Schema:**
+```python
+await log_execution_event(
+    week_id="2025-01-22",
+    event_type="order_placed",
+    account="COUNCIL",
+    event_data={
+        "trade_id": "uuid",
+        "symbol": "SPY",
+        "side": "buy",
+        "qty": 50000,
+        "order_id": "alpaca-order-id",
+        "direction": "LONG",
+        "conviction": 1.0,
+        "source": "council",
+        "timestamp": "2025-01-22T12:00:00Z"
+    }
+)
+```
+
+**Query Events:**
+```python
+from backend.db_helpers import fetch_all
+
+# Get all execution events for a week
+events = await fetch_all(
+    "SELECT * FROM execution_events WHERE week_id = $1 ORDER BY timestamp",
+    "2025-01-22"
+)
+
+# Get failed orders
+failures = await fetch_all(
+    "SELECT * FROM execution_events WHERE event_type = $1",
+    "order_failed"
+)
+```
+
+**Best Practices:**
+
+1. **Always Review Trades Before Approval:**
+   - Check conviction levels match expectations
+   - Verify position sizes are reasonable ($25k-$75k typical)
+   - Confirm instruments are in tradable universe
+   - Review DEEPSEEK is not included (should always be skipped)
+
+2. **Monitor Partial Failures:**
+   - If some accounts succeed and others fail, investigate why
+   - Common causes: insufficient buying power, market hours, API rate limits
+   - Check Alpaca account status in GUI
+
+3. **Audit Trail:**
+   - All executions are logged to PostgreSQL with timestamps
+   - Use event log to debug execution issues
+   - Compare intended trades (chairman decision) vs actual executions
+
+4. **Conviction Calibration:**
+   - Track position sizes vs actual P/L outcomes
+   - If high conviction trades consistently underperform, consider inverting sizing
+   - Monitor if inverse sizing (higher conviction = smaller position) is correct for your strategy
+
+5. **Execution Timing:**
+   - Weekly pipeline runs Wednesday 08:00 ET (after market open)
+   - Checkpoint pipelines run 09:00, 12:00, 14:00, 15:50 ET
+   - Ensure market is open when ExecutionStage runs (orders will fail if market closed)
+
+**See Also:**
+
+- `backend/pipeline/stages/execution.py` - Full implementation
+- `backend/multi_alpaca_client.py` - Multi-account order placement
+- `backend/db/execution_db.py` - Event logging implementation
+- [PIPELINE.md](../PIPELINE.md) - Pipeline architecture overview
 
 ---
 
