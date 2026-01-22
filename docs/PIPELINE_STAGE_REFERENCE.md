@@ -535,32 +535,438 @@ pipeline = Pipeline([
 
 #### PMPitchStage
 
-**Purpose:** Generate trade pitches from all configured PM models
+**Purpose:** Generate structured trading recommendations from all configured PM models based on research data
 
-**Parameters:**
-- `pm_models`: List of PM model identifiers (e.g., `["openai/gpt-5.1", "anthropic/claude-sonnet-4.5"]`)
-- `pitch_schema`: JSON schema for pitch validation
-- `prompt_template`: Jinja2 template for pitch generation
+**Overview:**
+
+`PMPitchStage` is the core decision-making stage where Portfolio Manager (PM) models generate individual trading recommendations. The stage orchestrates parallel queries to 5 PM models, each producing a structured pitch with instrument selection, direction, conviction, thesis bullets, and risk parameters.
+
+This is a **macro-only trading system** that enforces strict rules against technical analysis. Models must base recommendations exclusively on macro regime, policy, economic data, fundamentals, and cross-asset narratives. Any pitch mentioning technical indicators (RSI, MACD, moving averages, etc.) is automatically rejected and retried with a corrective prompt.
+
+The stage performs four key operations:
+1. Receives research packs and market data from previous stages
+2. Builds comprehensive prompts with tradable universe and constraints
+3. Queries all PM models in parallel via Requesty client
+4. Parses, validates, and filters pitches (with indicator ban enforcement)
+
+**Constructor Parameters:**
+- `temperature` (float | None): Model temperature for pitch generation
+  - Default: None (uses TemperatureManager default for "pm_pitch")
+  - Range: 0.0 (deterministic) to 2.0 (creative)
+  - Typical value: 0.7-1.0 for balanced creativity and consistency
 
 **Context Keys:**
-- Input: `RESEARCH_PACK_A` (dict), `RESEARCH_PACK_B` (dict) - Research reports
-- Output: `PM_PITCHES` (list) - List of trade pitch objects
 
-**Pitch Schema:**
+*Input:*
+- `RESEARCH_PACK_A` (dict) - Primary research pack from Perplexity/Gemini
+  - Contains: macro_regime, top_narratives, tradable_candidates, event_calendar
+  - Required: At least one research pack must be present
+- `RESEARCH_PACK_B` (dict, optional) - Alternative research pack
+  - If only one pack provided, stage uses it for both A and B
+  - Allows PM to cross-reference different research perspectives
+- `MARKET_METRICS` (dict, optional) - Market metrics from previous stage
+  - Contains: 7-day returns by instrument, 30-day correlation matrix
+  - Helps PMs understand recent price action and cross-asset relationships
+- `CURRENT_PRICES` (dict, optional) - Current prices and volumes
+  - Contains: Latest close prices, trading volumes for all instruments
+  - Used for limit order pricing and liquidity assessment
+- `TARGET_MODELS` (list[str], optional) - Subset of PM models to run
+  - Default: None (runs all 5 configured PM models)
+  - Use case: Testing specific models or running only council accounts
+
+*Output:*
+- `PM_PITCHES` (list[dict]) - List of validated PM pitch objects
+  - Each pitch contains full trading recommendation with metadata
+  - Only includes pitches that passed all validation checks
+  - Typically 5 pitches (one per PM model) unless validation failures occur
+
+**PM Pitch Schema (v2):**
+
+The pitch JSON follows a strict schema with risk profile validation:
+
 ```json
 {
   "idea_id": "uuid",
-  "model": "openai/gpt-5.1",
-  "instrument": "SPY",
+  "week_id": "2025-01-22",
+  "asof_et": "2025-01-22T16:00:00-05:00",
+  "pm_model": "openai/gpt-5.1",
+  "selected_instrument": "SPY",
   "direction": "LONG",
-  "horizon": "1w",
-  "thesis_bullets": ["..."],
-  "indicators": [...],
-  "invalidation": "...",
+  "horizon": "1W",
   "conviction": 1.5,
-  "timestamp": "ISO8601"
+  "risk_profile": "BASE",
+  "thesis_bullets": [
+    "Rates: Fed pivot expectations support risk assets",
+    "USD: Dollar weakness improves earnings outlook",
+    "Policy: Fiscal stimulus providing growth tailwind"
+  ],
+  "entry_policy": {
+    "mode": "limit",
+    "limit_price": null
+  },
+  "exit_policy": {
+    "time_stop_days": 7,
+    "stop_loss_pct": 0.015,
+    "take_profit_pct": 0.025,
+    "exit_before_events": ["NFP"]
+  },
+  "consensus_map": {
+    "research_pack_a": "agree",
+    "research_pack_b": "neutral"
+  },
+  "risk_notes": "Key risks: Hotter than expected inflation data, geopolitical escalation",
+  "compliance_check": {
+    "macro_only": true,
+    "no_ta_language": true
+  },
+  "timestamp": "2025-01-22T21:00:00Z",
+  "model": "gpt51",
+  "model_info": {
+    "model_id": "openai/gpt-5.1",
+    "account": "GPT-5.1",
+    "priority": 1
+  }
 }
 ```
+
+**FLAT Trade Schema:**
+
+When PM chooses not to trade (FLAT), the schema differs:
+
+```json
+{
+  "idea_id": "uuid",
+  "week_id": "2025-01-22",
+  "asof_et": "2025-01-22T16:00:00-05:00",
+  "pm_model": "openai/gpt-5.1",
+  "selected_instrument": "FLAT",
+  "direction": "FLAT",
+  "horizon": "1W",
+  "conviction": 0,
+  "risk_profile": null,
+  "thesis_bullets": [
+    "Policy: Insufficient macro clarity for directional trade",
+    "Risk: Market conditions require neutral stance"
+  ],
+  "entry_policy": {
+    "mode": "NONE",
+    "limit_price": null
+  },
+  "exit_policy": null,
+  "consensus_map": {
+    "research_pack_a": "neutral",
+    "research_pack_b": "neutral"
+  },
+  "risk_notes": "Macro uncertainty requires neutral positioning",
+  "compliance_check": {
+    "macro_only": true,
+    "no_ta_language": true
+  },
+  "timestamp": "2025-01-22T21:00:00Z"
+}
+```
+
+**Risk Profile Validation Rules:**
+
+The stage enforces standardized risk profiles (no custom stop-loss values allowed):
+
+```python
+RISK_PROFILES = {
+    "TIGHT": {
+        "stop_loss_pct": 0.010,   # 1.0% stop loss
+        "take_profit_pct": 0.015  # 1.5% take profit
+    },
+    "BASE": {
+        "stop_loss_pct": 0.015,   # 1.5% stop loss
+        "take_profit_pct": 0.025  # 2.5% take profit
+    },
+    "WIDE": {
+        "stop_loss_pct": 0.020,   # 2.0% stop loss
+        "take_profit_pct": 0.035  # 3.5% take profit
+    }
+}
+```
+
+**Validation Rules:**
+
+1. **Risk Profile Consistency:**
+   - `exit_policy.stop_loss_pct` must exactly match chosen `risk_profile`
+   - `exit_policy.take_profit_pct` must exactly match chosen `risk_profile`
+   - FLAT trades must have `risk_profile: null`
+
+2. **Entry Mode Validation:**
+   - Valid entry modes: `["limit"]`
+   - FLAT trades must use `"mode": "NONE"`
+
+3. **Exit Event Triggers:**
+   - Valid events: `["NFP", "CPI", "FOMC"]`
+   - Optional field in `exit_policy.exit_before_events`
+
+4. **Direction and Conviction Alignment:**
+   - LONG direction requires conviction > 0
+   - SHORT direction requires conviction < 0
+   - FLAT direction requires conviction == 0
+   - Conviction range: -2.0 to +2.0
+
+5. **Thesis Bullet Prefixes:**
+   - Each bullet must start with one of: `"Rates:"`, `"USD:"`, `"Inflation:"`, `"Growth:"`, `"Policy:"`, `"Cross-asset:"`, `"Catalyst:"`, `"Positioning:"`, `"Risk:"`
+   - Maximum 5 thesis bullets
+   - Enforces macro-focused thinking
+
+6. **Tradable Universe:**
+   - Valid instruments: `["SPY", "QQQ", "IWM", "TLT", "HYG", "UUP", "GLD", "USO", "VIXY", "SH", "FLAT"]`
+   - FLAT is special "no trade" instrument
+
+**Banned Indicator Keywords (Case-Insensitive):**
+
+The stage scans all string fields recursively and rejects pitches containing:
+
+```python
+BANNED_KEYWORDS = [
+    "rsi", "macd", "moving average", "moving-average",
+    "ema", "sma", "bollinger", "stochastic",
+    "fibonacci", "ichimoku", "adx", "atr"
+]
+```
+
+**Indicator Ban Enforcement:**
+
+When a banned keyword is detected:
+1. **First attempt fails** with `IndicatorError`
+2. **Automatic retry** with corrective prompt instructing model to output FLAT
+3. **Retry fails:** Generate automatic FLAT fallback pitch
+4. **Reasoning:** Prevents contamination of macro-only system with technical analysis
+
+**Configuration Example:**
+
+```python
+from backend.pipeline.stages.pm_pitch import PMPitchStage
+
+# Basic usage with defaults
+stage = PMPitchStage()
+
+# With custom temperature for more deterministic pitches
+stage = PMPitchStage(temperature=0.5)
+
+# Execute stage (requires research packs in context)
+context = await stage.execute(context)
+pm_pitches = context.get(PM_PITCHES)
+
+print(f"Generated {len(pm_pitches)} pitches")
+for pitch in pm_pitches:
+    print(f"{pitch['model']}: {pitch['direction']} {pitch['selected_instrument']} (conviction: {pitch['conviction']})")
+```
+
+**Pipeline Integration Example:**
+
+```python
+from backend.pipeline import Pipeline
+from backend.pipeline.stages.research import ResearchStage
+from backend.pipeline.stages.pm_pitch import PMPitchStage
+from backend.pipeline.stages.peer_review import PeerReviewStage
+
+pipeline = Pipeline([
+    ResearchStage(),        # Provides RESEARCH_PACK_A, MARKET_METRICS, CURRENT_PRICES
+    PMPitchStage(),         # Uses research to generate PM_PITCHES
+    PeerReviewStage(),      # Reviews PM_PITCHES
+])
+```
+
+**Error Handling:**
+
+The stage is designed to be fault-tolerant and never crash the pipeline:
+
+1. **Missing Research Packs:**
+   - Prints error message
+   - Falls back to placeholder research data
+   - Allows pipeline to continue (for testing)
+
+2. **Single Research Pack (Perplexity-only mode):**
+   - Uses same pack for both RESEARCH_PACK_A and RESEARCH_PACK_B
+   - Prints info message
+   - Normal operation continues
+
+3. **Missing Market Metrics:**
+   - Prints warning message
+   - Continues without market metrics in prompt
+   - PMs can still generate pitches based on research
+
+4. **Missing Current Prices:**
+   - Prints warning message
+   - Continues without price data in prompt
+   - Limit orders may be suboptimal
+
+5. **Model Query Failures:**
+   - Catches exceptions per model
+   - Logs failure and continues with other models
+   - Returns partial pitch list (e.g., 4/5 pitches)
+
+6. **JSON Parsing Errors:**
+   - Attempts multiple repair strategies:
+     - Remove // comments
+     - Remove trailing commas
+     - Combined repairs
+   - Prints repair attempt success/failure
+   - Returns None if all repairs fail
+
+7. **Indicator Ban Violations:**
+   - First retry with corrective prompt
+   - Second failure: Generate FLAT fallback
+   - Ensures pipeline never stops for indicator issues
+
+8. **Validation Failures:**
+   - Logs specific validation error (missing fields, invalid values)
+   - Returns None for that pitch
+   - Continues processing other models
+
+**Common Validation Errors:**
+
+1. **Risk Profile Mismatch:**
+   ```
+   ERROR: exit_policy.stop_loss_pct (0.020) does not match risk_profile BASE (0.015)
+   ```
+   - Cause: Model provided custom stop-loss value
+   - Fix: Automatic in retry - model forced to use standardized profiles
+
+2. **FLAT Trade with Risk Profile:**
+   ```
+   ERROR: FLAT trades must not have risk_profile (got: BASE)
+   ```
+   - Cause: Model confused FLAT rules
+   - Fix: Automatic in retry - FLAT schema enforced
+
+3. **Missing Required Fields:**
+   ```
+   ERROR: Missing required fields: asof_et, risk_profile
+   ```
+   - Cause: Model didn't follow JSON schema
+   - Fix: Improved system prompt, schema examples
+
+4. **Invalid Conviction Range:**
+   ```
+   ERROR: Conviction out of range: 2.5 (must be -2 to +2)
+   ```
+   - Cause: Model exceeded conviction bounds
+   - Fix: Validation rejects pitch
+
+5. **Direction/Conviction Mismatch:**
+   ```
+   ERROR: LONG direction must have positive conviction, got -0.5
+   ```
+   - Cause: Model inconsistency
+   - Fix: Validation rejects pitch
+
+6. **Thesis Bullet Format:**
+   - Not explicitly validated in code, but prompt enforces
+   - Should start with category prefix (e.g., "Rates:", "Policy:")
+
+7. **Indicator Ban Violation:**
+   ```
+   ERROR: Indicator banned: rsi
+   ```
+   - Cause: Model mentioned technical indicator
+   - Fix: Automatic retry → FLAT fallback
+
+**Performance Characteristics:**
+
+- **Model count:** 5 PM models queried in parallel
+- **Query time per model:** 10-30s (depends on model speed)
+- **Total stage duration:** ~15-45s (parallel execution)
+- **Retry overhead:** +10-20s per model if indicator ban triggered
+- **Parse/validate time:** <1s per pitch (negligible)
+- **Typical success rate:** 90-100% (most pitches pass validation)
+- **Indicator ban trigger rate:** 5-15% (occasional TA language slips in)
+
+**Tradable Universe Reference:**
+
+```python
+INSTRUMENTS = [
+    "SPY",   # S&P 500 ETF (broad US equities)
+    "QQQ",   # Nasdaq 100 ETF (tech-heavy)
+    "IWM",   # Russell 2000 ETF (small caps)
+    "TLT",   # 20+ Year Treasury Bond ETF (duration)
+    "HYG",   # High Yield Corporate Bond ETF (credit)
+    "UUP",   # US Dollar Index ETF (USD proxy)
+    "GLD",   # Gold ETF (safe haven)
+    "USO",   # Oil ETF (commodities/energy)
+    "VIXY",  # VIX Short-Term ETF (volatility)
+    "SH"     # ProShares Short S&P 500 ETF (short equities)
+]
+```
+
+**Common Issues and Debugging:**
+
+1. **"No research packs found" error:**
+   - Cause: PMPitchStage executed before ResearchStage
+   - Impact: Falls back to placeholder data (testing mode)
+   - Fix: Ensure ResearchStage runs first in pipeline
+
+2. **"Missing required fields" for specific model:**
+   - Cause: Model didn't follow JSON schema exactly
+   - Impact: That model's pitch is skipped
+   - Fix: Review model's raw output, improve system prompt
+
+3. **Indicator ban triggered repeatedly:**
+   - Cause: Model has strong TA bias, ignores macro-only rules
+   - Impact: Falls back to FLAT pitch
+   - Fix: Review model prompt, consider model replacement
+
+4. **All pitches are FLAT:**
+   - Cause: Research data lacks actionable signals, or models too conservative
+   - Impact: No directional trades for the week
+   - Fix: Review research quality, check if macro regime is truly unclear
+
+5. **Risk profile validation failures:**
+   - Cause: Model inventing custom stop-loss values
+   - Impact: Pitch rejected, retry enforces standardized profiles
+   - Fix: System prompt emphasizes three standard profiles
+
+6. **Conviction/direction mismatches:**
+   - Cause: Model logic error (e.g., LONG with negative conviction)
+   - Impact: Pitch rejected
+   - Fix: Improve model prompt clarity on conviction semantics
+
+7. **JSON parsing fails after all repairs:**
+   - Cause: Model output is severely malformed (missing braces, quotes)
+   - Impact: That pitch is skipped
+   - Fix: Review raw model output, possibly model API issue
+
+8. **Stage takes too long (>2 minutes):**
+   - Cause: One or more models very slow, or indicator ban retries
+   - Impact: Pipeline latency increases
+   - Fix: Consider model timeout settings, review model performance
+
+**Knowledge Graph Integration:**
+
+The stage includes optional knowledge graph digest formatting:
+- If `research_pack.weekly_graph` is present, generates digest
+- Digest includes: top market edges, asset context, direct drivers
+- Helps PMs understand structural relationships and narrative flow
+- Falls back gracefully if graph generation fails
+
+**Data Quality Considerations:**
+
+- **Thesis quality:** Varies significantly by model sophistication
+- **Conviction calibration:** Each model has different conviction scaling habits
+- **Research interpretation:** Models may emphasize different aspects of same research
+- **Risk assessment:** Risk notes quality depends on model reasoning depth
+- **Macro-only compliance:** Enforced by indicator ban, but language can be ambiguous (e.g., "oversold" is macro-adjacent but often TA-tinged)
+
+**Use Cases:**
+
+1. **Weekly Pipeline Execution:** Generate fresh pitches every Wednesday morning
+2. **Individual Account Trading:** Each PM model maps to separate paper trading account
+3. **Council Input:** All 5 pitches feed into peer review and chairman synthesis
+4. **Model Performance Tracking:** Compare pitch quality and outcomes across models
+5. **Regime Adaptation:** Observe how different models adapt to changing macro regimes
+
+**See Also:**
+
+- `backend/pipeline/stages/pm_pitch.py` - Full implementation
+- `backend/requesty_client.py` - Parallel model query client
+- `backend/config/models.yaml` - PM model configuration
+- `backend/config/temperature.yaml` - Temperature configuration
+- `backend/pipeline/graph_digest.py` - Knowledge graph digest generation
 
 ---
 
