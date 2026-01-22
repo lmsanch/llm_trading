@@ -22,6 +22,7 @@ For detailed architecture information, see [PIPELINE.md](../PIPELINE.md).
 |-------|---------|------------|--------|---------|
 | `GeminiResearchStage` | Generate deep research report via Gemini | Model config, API key | `USER_QUERY` | `RESEARCH_PACK_A` |
 | `PerplexityResearchStage` | Generate deep research report via Perplexity | Model config, API key | `USER_QUERY` | `RESEARCH_PACK_B` |
+| `MarketSentimentStage` | Gather news and analyze market sentiment | Search provider, search terms, temperature | `MARKET_SNAPSHOT` (optional) | `SENTIMENT_PACK` |
 | `PMPitchStage` | Generate trade pitches from all PM models | PM model list, schemas | `RESEARCH_PACK_A`, `RESEARCH_PACK_B` | `PM_PITCHES` |
 | `PeerReviewStage` | Anonymized cross-evaluation of pitches | Review criteria, scoring schema | `PM_PITCHES` | `PEER_REVIEWS`, `LABEL_TO_MODEL` |
 | `ChairmanStage` | Synthesize final trading decision | Chairman model, synthesis prompt | `PM_PITCHES`, `PEER_REVIEWS` | `CHAIRMAN_DECISION` |
@@ -308,6 +309,225 @@ pipeline = Pipeline([
 - `backend/config/prompts/research_prompt.md` - Default prompt template
 - `backend/research/perplexity.py` - Perplexity API integration
 - `backend/storage/data_fetcher.py` - Market data collection service
+
+---
+
+#### MarketSentimentStage
+
+**Purpose:** Gather recent news and analyze sentiment for tradable instruments
+
+**Overview:**
+
+`MarketSentimentStage` performs news search and sentiment analysis to complement macro research. It provides context on current market narratives, breaking news, and instrument-specific sentiment that can inform trading decisions.
+
+The stage performs five key operations:
+1. Extracts tradable instruments from market snapshot
+2. Searches for recent news on each instrument using configured search terms
+3. Retrieves full article content via Jina Reader (where available)
+4. Generates AI-powered sentiment summary using LLM
+5. Returns structured sentiment pack with articles and analysis
+
+**Constructor Parameters:**
+- `search_provider` (str | None): Optional search provider ID override
+  - Default: None (uses SearchManager default provider)
+  - Options: Provider IDs from search configuration (e.g., "exa", "tavily")
+  - Use case: Force specific search provider for testing or provider preference
+- `search_terms` (List[str] | None): Search terms to append to each ticker query
+  - Default: ["latest news", "market outlook", "analysis"]
+  - Use case: Customize search focus (e.g., ["earnings", "guidance"] for earnings season)
+- `temperature` (float | None): Model temperature for sentiment generation
+  - Default: None (uses TemperatureManager default for "market_sentiment")
+  - Range: 0.0 (deterministic) to 2.0 (creative)
+  - Use case: Control sentiment summary creativity vs consistency
+
+**Context Keys:**
+
+*Input:*
+- `MARKET_SNAPSHOT` (dict, optional) - Market data snapshot from previous stage
+  - If present, uses `instruments` dict keys as ticker list
+  - If absent, skips sentiment analysis gracefully
+
+*Output:*
+- `SENTIMENT_PACK` (dict) - Structured sentiment data containing:
+  - `asof_et`: Timestamp of sentiment capture (ISO8601)
+  - `search_provider`: Search provider used (e.g., "exa", "tavily")
+  - `search_terms_used`: List of search terms applied
+  - `instrument_sentiments`: Dict mapping tickers to sentiment data
+  - `overall_market_sentiment`: Aggregate sentiment ("bullish", "bearish", "neutral")
+  - `key_headlines`: Top 10 most relevant headlines across all instruments
+  - `sentiment_summary`: LLM-generated narrative summary of market sentiment
+
+**Sentiment Pack Schema:**
+
+```json
+{
+  "asof_et": "2025-01-22T14:30:00Z",
+  "search_provider": "exa",
+  "search_terms_used": ["latest news", "market outlook", "analysis"],
+  "instrument_sentiments": {
+    "SPY": {
+      "article_count": 12,
+      "articles": [
+        {
+          "title": "S&P 500 Hits New High on Tech Rally",
+          "url": "https://example.com/article1",
+          "snippet": "The S&P 500 index surged to a new record...",
+          "published_date": "2025-01-22T13:00:00Z",
+          "source": "Financial Times"
+        }
+      ],
+      "sentiment": "bullish"
+    },
+    "TLT": {
+      "article_count": 5,
+      "articles": [...],
+      "sentiment": "bearish"
+    }
+  },
+  "overall_market_sentiment": "bullish",
+  "key_headlines": [
+    "S&P 500 Hits New High on Tech Rally",
+    "Fed Signals Patience on Rate Cuts",
+    "..."
+  ],
+  "sentiment_summary": "Market sentiment is BULLISH driven by tech sector strength and stabilizing inflation data. Key themes include AI infrastructure spending, Fed policy outlook, and earnings optimism. Notable risk: potential profit-taking after extended rally."
+}
+```
+
+**Configuration Example:**
+
+```python
+from backend.pipeline.stages.market_sentiment import MarketSentimentStage
+
+# Basic usage with defaults
+stage = MarketSentimentStage()
+
+# With custom search provider
+stage = MarketSentimentStage(search_provider="exa")
+
+# With custom search terms for earnings focus
+stage = MarketSentimentStage(
+    search_terms=["earnings report", "guidance", "analyst estimates"]
+)
+
+# With custom temperature for more deterministic sentiment
+stage = MarketSentimentStage(temperature=0.3)
+
+# Full customization
+stage = MarketSentimentStage(
+    search_provider="tavily",
+    search_terms=["breaking news", "price action"],
+    temperature=0.5
+)
+
+# Execute stage
+context = await stage.execute(context)
+sentiment_pack = context.get(SENTIMENT_PACK)
+```
+
+**Error Handling:**
+
+The stage is designed to be fault-tolerant and never crash the pipeline:
+
+1. **Missing Market Snapshot:**
+   - Prints warning message
+   - Returns original context unchanged
+   - Allows pipeline to continue without sentiment data
+
+2. **Search Provider Unavailable:**
+   - Falls back to SearchManager default provider
+   - Logs provider switch
+   - Continues with alternative provider
+
+3. **No Articles Found:**
+   - Creates sentiment entry with article_count=0
+   - Sets sentiment to "neutral"
+   - Continues processing other instruments
+
+4. **LLM Sentiment Generation Failure:**
+   - Catches exception and logs error
+   - Returns fallback sentiment: "Neutral - sentiment analysis unavailable"
+   - Sentiment pack structure remains valid
+
+5. **Partial Search Failures:**
+   - Processes successful results
+   - Logs warnings for failed instruments
+   - Returns partial sentiment pack with available data
+
+**Integration with Other Stages:**
+
+```python
+# Typical pipeline integration
+from backend.pipeline import Pipeline
+from backend.pipeline.stages.market_sentiment import MarketSentimentStage
+from backend.pipeline.stages.research import ResearchStage
+
+pipeline = Pipeline([
+    MarketSnapshotStage(),      # Provides MARKET_SNAPSHOT
+    MarketSentimentStage(),     # Adds SENTIMENT_PACK
+    ResearchStage(),            # Uses both MARKET_SNAPSHOT and SENTIMENT_PACK
+    # ... PM stages can use SENTIMENT_PACK for additional context
+])
+```
+
+**Performance Characteristics:**
+
+- **Instrument count:** Typically 8-12 tickers from asset universe
+- **Articles per ticker:** 5-15 results (depends on search provider)
+- **Search time:** 2-5s per ticker (parallel search not yet implemented)
+- **LLM sentiment generation:** 5-10s (Gemini Flash model)
+- **Total stage duration:** ~30-60s typical (sequential searches)
+- **Future optimization:** Parallel ticker searches could reduce to ~10-20s
+
+**Common Issues and Debugging:**
+
+1. **"No market snapshot found" warning:**
+   - Cause: MarketSentimentStage executed before market data stage
+   - Impact: Sentiment analysis skipped
+   - Fix: Ensure MarketSnapshotStage or ResearchStage runs first
+
+2. **"No articles found" for specific ticker:**
+   - Cause: Search terms too specific, or ticker not newsworthy
+   - Impact: Sentiment set to "neutral" for that ticker
+   - Fix: Adjust search_terms to be more generic, or add fallback terms
+
+3. **"Failed to generate sentiment summary" warning:**
+   - Cause: Gemini API rate limit, invalid key, or network issue
+   - Impact: Fallback message used, sentiment pack still valid
+   - Fix: Verify GEMINI_API_KEY in .env, check rate limits
+
+4. **Search provider errors:**
+   - Cause: Provider API key invalid or rate limited
+   - Impact: Falls back to default provider
+   - Fix: Verify provider API keys in .env (EXA_API_KEY, TAVILY_API_KEY)
+
+5. **Stage takes too long (>2 minutes):**
+   - Cause: Sequential search for many tickers with slow provider
+   - Impact: Pipeline latency increases
+   - Fix: Reduce number of instruments or implement parallel searching
+
+**Data Quality Considerations:**
+
+- **Article freshness:** Search results depend on provider's index update frequency
+- **Source reliability:** Article sources vary by provider (financial news vs blogs)
+- **Sentiment accuracy:** LLM-generated sentiment is subjective and may not reflect true market impact
+- **Geographic bias:** Search providers may favor US news sources
+- **Language limitation:** Non-English articles may be excluded or poorly translated
+
+**Use Cases:**
+
+1. **Pre-Research Context:** Run before ResearchStage to inform macro analysis with latest news
+2. **Breaking News Detection:** Capture market-moving news that emerged after last pipeline run
+3. **Instrument-Specific Sentiment:** Complement macro regime with ticker-level sentiment
+4. **Headline Risk Assessment:** Identify potential risks from recent news flow
+5. **Narrative Tracking:** Monitor evolving market narratives over time
+
+**See Also:**
+
+- `backend/pipeline/stages/market_sentiment.py` - Full implementation
+- `backend/search/manager.py` - SearchManager and provider integration
+- `backend/search/providers/` - Individual search provider implementations
+- `backend/config/temperature.yaml` - Temperature configuration for sentiment generation
 
 ---
 
