@@ -974,38 +974,319 @@ The stage includes optional knowledge graph digest formatting:
 
 #### PeerReviewStage
 
-**Purpose:** Anonymized cross-evaluation of PM pitches to prevent model favoritism
+**Purpose:** Anonymized cross-evaluation of PM pitches to prevent model favoritism and ensure objective critique
 
-**Parameters:**
-- `review_models`: List of models to use for review (typically same as PM models)
-- `scoring_schema`: JSON schema defining review scoring criteria
-- `anonymize`: Enable anonymization (default: true)
+**Overview:**
+
+`PeerReviewStage` implements a peer review process where each PM model evaluates the other models' trading pitches in a blind review format. This stage is critical for:
+
+1. **Preventing Model Favoritism:** Anonymizing pitches eliminates bias toward specific models or providers
+2. **Objective Evaluation:** Models critique ideas on merit, not on who proposed them
+3. **Quality Assurance:** Systematic scoring across 7 dimensions ensures comprehensive evaluation
+4. **Training Data Quality:** Anonymized reviews create cleaner training data for future model improvements
+5. **Kill Shot Critiques:** Each model identifies the strongest counterargument to each pitch
+6. **Flip Conditions:** Reviewers suggest what would need to change to invalidate the thesis
+
+The stage performs three key operations:
+1. Anonymizes all PM pitches by removing model identity (e.g., "Pitch A", "Pitch B")
+2. Each PM model reviews all other pitches (not their own)
+3. Generates structured reviews with rubric scores, critiques, and suggestions
+
+**Constructor Parameters:**
+- `temperature` (float | None): Model temperature for review generation
+  - Default: None (uses TemperatureManager default for "peer_review")
+  - Range: 0.0 (deterministic) to 2.0 (creative)
+  - Typical: 0.5-0.7 for balanced, critical analysis
 
 **Context Keys:**
-- Input: `PM_PITCHES` (list) - Trade pitches to review
-- Output:
-  - `PEER_REVIEWS` (list) - Anonymized review results
-  - `LABEL_TO_MODEL` (dict) - Mapping from anonymous labels to model names
+
+*Input:*
+- `PM_PITCHES` (list) - Trade pitches from PMPitchStage
+  - Each pitch contains: model, instrument, direction, thesis, conviction, risk profile, etc.
+  - Minimum 2 pitches required for meaningful peer review
+
+*Output:*
+- `PEER_REVIEWS` (list) - Structured review results containing:
+  - `review_id`: Unique identifier for this review
+  - `pitch_label`: Anonymized label (e.g., "Pitch A")
+  - `reviewer_model`: Model that generated the review
+  - `scores`: Dict of 7 rubric dimension scores (1-10)
+  - `average_score`: Mean score across all dimensions
+  - `best_argument_against`: Strongest counterargument to the pitch
+  - `one_flip_condition`: What would invalidate the thesis
+  - `suggested_fix`: How to improve the pitch
+  - `raw_response`: Full text review from the model
+
+- `LABEL_TO_MODEL` (dict) - Mapping from anonymous labels to original model names
+  - Example: `{"Pitch A": "openai/gpt-5.1", "Pitch B": "anthropic/claude-sonnet-4.5"}`
+  - Used by ChairmanStage to de-anonymize pitches when making final decision
+
+**Anonymization Process:**
+
+The anonymization process ensures reviewers cannot identify which model created which pitch:
+
+1. **Label Assignment:** Each pitch is assigned a random label (Pitch A, Pitch B, Pitch C, Pitch D)
+2. **Identity Stripping:** Model name, account name, and any identifying metadata are removed
+3. **Content Preservation:** Thesis, conviction, risk profile, entry/exit policies remain intact
+4. **Mapping Storage:** Original model identity stored in `LABEL_TO_MODEL` for later de-anonymization
+5. **Review Distribution:** Each model reviews all pitches except their own (if identifiable)
+
+**Rubric Dimensions:**
+
+Each pitch is scored on 7 dimensions (1-10 scale):
+
+1. **clarity** - How clear and understandable is the thesis?
+   - Logical flow, well-articulated reasoning, no ambiguity
+
+2. **edge_plausibility** - How plausible is the claimed edge?
+   - Information advantage, timing advantage, structural advantage
+
+3. **timing_catalyst** - How well-defined is the catalyst and timing?
+   - Specific events, clear timeline, catalyst-driven entry
+
+4. **risk_definition** - How well-defined are the risks?
+   - Clear invalidation criteria, specific stop loss, scenario analysis
+
+5. **risk_management** - How well-structured are the risk controls?
+   - Stop loss placement, take profit targets, time stops, position sizing
+
+6. **originality** - How original is the idea?
+   - Non-consensus view, unique angle, not following the herd
+
+7. **tradeability** - How tradable is this idea in practice?
+   - Liquid instruments, clear entry/exit, executable in paper trading
 
 **Review Schema:**
+
 ```json
 {
-  "review_id": "uuid",
-  "pitch_id": "uuid",
+  "review_id": "uuid-v4",
+  "pitch_label": "Pitch A",
+  "reviewer_model": "openai/gpt-5.1",
+  "reviewer_account": "ACCT_1_GPT5",
   "scores": {
     "clarity": 8,
     "edge_plausibility": 7,
     "timing_catalyst": 6,
     "risk_definition": 9,
-    "indicator_integrity": 8,
+    "risk_management": 8,
     "originality": 5,
     "tradeability": 7
   },
-  "best_argument_against": "...",
-  "one_flip_condition": "...",
-  "suggested_fix": "..."
+  "average_score": 7.14,
+  "best_argument_against": "The thesis assumes Fed will pivot, but recent data suggests otherwise. If inflation remains sticky, the entire trade invalidates.",
+  "one_flip_condition": "CPI print above 3.5% would invalidate the dovish Fed assumption",
+  "suggested_fix": "Add a short-dated time stop (1 week) and tighter stop loss at -2% to limit downside if thesis proves wrong quickly",
+  "raw_response": "Full text review from model...",
+  "reviewed_at": "2025-01-15T14:30:00Z"
 }
 ```
+
+**Configuration Example:**
+
+```python
+from backend.pipeline.stages.peer_review import PeerReviewStage
+
+# Basic usage with default temperature
+stage = PeerReviewStage()
+
+# With custom temperature for more deterministic reviews
+stage = PeerReviewStage(temperature=0.3)
+
+# With higher temperature for more creative critiques
+stage = PeerReviewStage(temperature=0.8)
+
+# Execute stage
+context = await stage.execute(context)
+peer_reviews = context.get(PEER_REVIEWS)
+label_to_model = context.get(LABEL_TO_MODEL)
+
+# Access review data
+for review in peer_reviews:
+    print(f"Reviewer: {review['reviewer_account']}")
+    print(f"Pitch: {review['pitch_label']}")
+    print(f"Average Score: {review['average_score']:.2f}/10")
+    print(f"Kill Shot: {review['best_argument_against']}")
+    print()
+```
+
+**Error Handling:**
+
+The stage is designed to be robust and never crash the pipeline:
+
+1. **No Pitches Found:**
+   - Returns original context unchanged
+   - Prints error message: "❌ Error: PM pitches not found in context"
+   - Downstream stages should check for PEER_REVIEWS presence
+
+2. **Model Query Failure:**
+   - If a model fails to respond, that model's reviews are skipped
+   - Other models' reviews are still collected
+   - Prints warning: "❌ {model_account} ({model_key}) - Failed to parse review"
+   - Pipeline continues with partial review data
+
+3. **Parse Failure:**
+   - If review response cannot be parsed, that review is skipped
+   - Prints warning with model details
+   - Other reviews proceed normally
+   - Common causes: malformed JSON, unexpected response format
+
+4. **Empty Review List:**
+   - If all models fail to generate reviews, returns empty list
+   - PEER_REVIEWS key will be set but list will be empty
+   - ChairmanStage can still proceed (will see pitches without peer scores)
+
+**Anonymization Details:**
+
+The anonymization process preserves all trade-relevant information while hiding identity:
+
+**Preserved Fields:**
+- `selected_instrument`: Ticker symbol (e.g., "SPY")
+- `direction`: Trade direction ("LONG", "SHORT", "FLAT")
+- `horizon`: Time horizon ("1W", "2W", "1M")
+- `thesis_bullets`: List of thesis points
+- `conviction`: Conviction score (0-2)
+- `risk_profile`: Risk profile ("BASE", "AGGRESSIVE", "CONSERVATIVE")
+- `entry_policy`: Entry execution rules
+- `exit_policy`: Stop loss, take profit, time stop rules
+- `risk_notes`: Additional risk management notes
+
+**Stripped Fields:**
+- `model`: Original model identifier
+- `model_info`: Account name and model details
+- Any other metadata that could identify the source
+
+**Added Fields:**
+- `anonymized_label`: Random label (e.g., "Pitch A")
+- `original_model`: Stored separately in LABEL_TO_MODEL mapping
+- `original_account`: Stored separately for post-review de-anonymization
+
+**Integration with Other Stages:**
+
+```python
+# Typical pipeline integration
+from backend.pipeline import Pipeline
+from backend.pipeline.stages.pm_pitch import PMPitchStage
+from backend.pipeline.stages.peer_review import PeerReviewStage
+from backend.pipeline.stages.chairman import ChairmanStage
+
+pipeline = Pipeline([
+    # ... Research stages populate RESEARCH_PACK_A, RESEARCH_PACK_B
+    PMPitchStage(),        # Generates PM_PITCHES
+    PeerReviewStage(),     # Anonymizes and reviews PM_PITCHES
+    ChairmanStage(),       # Uses PEER_REVIEWS and de-anonymized PM_PITCHES
+    # ... Execution stages use CHAIRMAN_DECISION
+])
+
+# The chairman stage receives:
+# - PM_PITCHES (original pitches with model info)
+# - PEER_REVIEWS (anonymized reviews with scores)
+# - LABEL_TO_MODEL (mapping to de-anonymize if needed)
+```
+
+**Common Issues and Debugging:**
+
+1. **"PM pitches not found in context" error:**
+   - Cause: PeerReviewStage run before PMPitchStage
+   - Impact: No reviews generated, stage returns original context
+   - Fix: Ensure PMPitchStage runs before PeerReviewStage in pipeline
+
+2. **"Failed to parse review" warnings:**
+   - Cause: Model returned non-JSON response or unexpected format
+   - Impact: That model's reviews are skipped
+   - Fix: Check model temperature (too high may cause rambling), verify prompt clarity
+
+3. **Empty peer_reviews list:**
+   - Cause: All models failed to generate parseable reviews
+   - Impact: ChairmanStage proceeds without peer feedback
+   - Fix: Check API keys, model availability, temperature settings
+
+4. **Low review scores across the board:**
+   - Cause: Models may be too critical or misunderstanding rubric
+   - Impact: All pitches score poorly, may bias chairman decision
+   - Fix: Review system prompt in peer_review.py, adjust rubric instructions
+
+5. **Duplicate reviews (same reviewer reviewing same pitch twice):**
+   - Cause: Bug in review distribution logic
+   - Impact: Unfair weighting of certain reviewer opinions
+   - Fix: Should not happen; report as bug if seen
+
+**Performance Characteristics:**
+
+- **Execution Time:** 10-30 seconds depending on number of pitches and models
+  - Each model reviews all other pitches in parallel
+  - 4 PM models × 4 pitches = ~16 reviews total
+  - Perplexity models (grok) may be slower than OpenAI/Anthropic
+
+- **API Costs:** ~$0.05-0.20 per review cycle
+  - Input tokens: ~1000-2000 per review (pitch content + rubric + system prompt)
+  - Output tokens: ~500-1000 per review (scores + critiques + suggestions)
+  - Total: ~16 reviews × ~3000 tokens = ~48k tokens per stage execution
+
+- **Rate Limits:** Respects model provider rate limits
+  - Uses requesty_client for parallel queries with retry logic
+  - Falls back gracefully if rate limit hit (skips that model's reviews)
+
+- **Memory Usage:** Minimal (<50MB)
+  - Stores anonymized pitches in memory during review generation
+  - Discards immediately after reviews complete
+  - PEER_REVIEWS list stored in context (~10-20KB per review)
+
+**Database Persistence:**
+
+Peer reviews are not automatically persisted to database (unlike research reports). To store reviews:
+
+```python
+# In your pipeline post-processing
+from backend.db_helpers import execute
+
+peer_reviews = context.get(PEER_REVIEWS)
+for review in peer_reviews:
+    await execute(
+        """
+        INSERT INTO peer_reviews
+        (week_id, pitch_label, reviewer_model, scores, best_argument_against,
+         one_flip_condition, suggested_fix, average_score, reviewed_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        """,
+        week_id,
+        review["pitch_label"],
+        review["reviewer_model"],
+        review["scores"],  # JSONB
+        review["best_argument_against"],
+        review["one_flip_condition"],
+        review["suggested_fix"],
+        review["average_score"],
+        review["reviewed_at"]
+    )
+```
+
+**Best Practices:**
+
+1. **Temperature Selection:**
+   - Use 0.5-0.7 for balanced, critical analysis
+   - Lower (0.3-0.5) for more consistent scoring
+   - Higher (0.7-1.0) for more creative critiques
+
+2. **Rubric Calibration:**
+   - Review scores across multiple weeks to calibrate expectations
+   - Adjust system prompt if scores consistently too high/low
+   - Track inter-rater reliability (do models agree on good/bad pitches?)
+
+3. **Kill Shot Quality:**
+   - Best reviews identify non-obvious counterarguments
+   - Weak reviews just restate obvious risks
+   - Use kill shot quality as meta-metric for review usefulness
+
+4. **Anonymization Integrity:**
+   - Never reveal model identity in prompts or context available to reviewers
+   - ChairmanStage should de-anonymize only after reviews complete
+   - Preserve LABEL_TO_MODEL for post-mortem analysis
+
+5. **Review Distribution:**
+   - Ensure each pitch reviewed by at least 3 other models
+   - Track reviewer-pitch matrix to detect biases
+   - Consider excluding self-reviews (model reviewing own pitch)
 
 ---
 
