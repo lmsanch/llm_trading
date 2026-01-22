@@ -2507,6 +2507,460 @@ These stages are used in the baseline `LLMCouncilPipeline` for conversational AI
 
 ---
 
+## Debugging and Best Practices
+
+### Common Debugging Techniques
+
+#### 1. Context Inspection
+
+Inspect pipeline context at any point to understand state:
+
+```python
+# Print all context keys
+print("Context keys:", list(context._data.keys()))
+
+# Check if specific key exists
+if context.has(RESEARCH_PACK_A):
+    print("Research pack A is present")
+
+# Print context value with pretty formatting
+import json
+research_pack = context.get(RESEARCH_PACK_A)
+print(json.dumps(research_pack, indent=2))
+
+# Check metadata for errors
+if context._metadata.get("ResearchStage_error"):
+    print(f"Error: {context._metadata['ResearchStage_error']}")
+```
+
+#### 2. Stage-Level Logging
+
+Add detailed logging to understand stage execution:
+
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+
+class MyStage(Stage):
+    async def execute(self, context: PipelineContext) -> PipelineContext:
+        logger.info(f"{self.name} starting")
+
+        # Log input keys
+        logger.debug(f"Input context keys: {list(context._data.keys())}")
+
+        # Perform work
+        result = await self._do_work(context)
+
+        # Log output
+        logger.info(f"{self.name} completed successfully")
+        logger.debug(f"Output: {result}")
+
+        return context.set(MY_OUTPUT_KEY, result)
+```
+
+#### 3. Pipeline Replay
+
+Use event sourcing to replay pipeline execution:
+
+```python
+from backend.storage import EventStore
+
+# Load events from specific week
+store = EventStore("runs/week_2025-01-15/events.sqlite")
+events = store.get_events_by_type("weekly_pipeline")
+
+# Replay pipeline with same inputs
+for event in events:
+    print(f"Event: {event['event_type']} at {event['timestamp']}")
+    print(f"Payload: {json.dumps(event['payload'], indent=2)}")
+```
+
+#### 4. Step-by-Step Execution
+
+Run stages individually to isolate issues:
+
+```python
+# Instead of full pipeline
+# context = await weekly_pipeline.execute(context)
+
+# Run stages one at a time
+context = await GeminiResearchStage().execute(context)
+print("After Gemini:", context.get(RESEARCH_PACK_A))
+
+context = await PerplexityResearchStage().execute(context)
+print("After Perplexity:", context.get(RESEARCH_PACK_B))
+
+context = await PMPitchStage().execute(context)
+print("After PM Pitches:", context.get(PM_PITCHES))
+# ... continue step-by-step
+```
+
+#### 5. API Response Debugging
+
+For stages that call external APIs, log full request/response:
+
+```python
+# In OpenRouter or research provider code
+logger.debug(f"Request: {request_payload}")
+response = await client.post(url, json=request_payload)
+logger.debug(f"Response status: {response.status_code}")
+logger.debug(f"Response body: {response.text}")
+```
+
+---
+
+### Error Handling Patterns
+
+#### Stage-Level Error Handling
+
+Each stage should handle errors gracefully:
+
+```python
+class RobustStage(Stage):
+    async def execute(self, context: PipelineContext) -> PipelineContext:
+        try:
+            result = await self._do_work(context)
+            return context.set(self.output_key, result)
+
+        except ValueError as e:
+            # Validation errors - fail fast
+            logger.error(f"{self.name} validation failed: {e}")
+            raise
+
+        except TimeoutError as e:
+            # Timeout - store error and continue with degraded output
+            logger.warning(f"{self.name} timed out: {e}")
+            return context.set_metadata(f"{self.name}_error", str(e))
+
+        except Exception as e:
+            # Unexpected errors - log and fail
+            logger.exception(f"{self.name} failed unexpectedly")
+            raise
+```
+
+#### Input Validation
+
+Always validate inputs before processing:
+
+```python
+async def execute(self, context: PipelineContext) -> PipelineContext:
+    # Check required keys
+    if not context.has(RESEARCH_PACK_A):
+        raise ValueError("RESEARCH_PACK_A is required")
+
+    research_pack = context.get(RESEARCH_PACK_A)
+
+    # Validate structure
+    if not isinstance(research_pack, dict):
+        raise ValueError("RESEARCH_PACK_A must be dict")
+
+    if "structured_json" not in research_pack:
+        raise ValueError("RESEARCH_PACK_A missing structured_json")
+
+    # Proceed with validated input
+    return await self._process(context, research_pack)
+```
+
+#### Graceful Degradation
+
+Allow pipeline to continue with partial results:
+
+```python
+async def execute(self, context: PipelineContext) -> PipelineContext:
+    results = []
+    errors = []
+
+    for account in accounts:
+        try:
+            result = await self._process_account(account)
+            results.append(result)
+        except Exception as e:
+            logger.error(f"Failed to process {account}: {e}")
+            errors.append({"account": account, "error": str(e)})
+
+    # Store both successes and failures
+    output = {
+        "results": results,
+        "errors": errors,
+        "success": len(results) > 0
+    }
+
+    return context.set(self.output_key, output)
+```
+
+---
+
+### Context Key Usage Examples
+
+#### Reading Context Values
+
+```python
+from backend.pipeline.context_keys import (
+    RESEARCH_PACK_A,
+    MARKET_SNAPSHOT,
+    PM_PITCHES
+)
+
+# Get with default value
+research_pack = context.get(RESEARCH_PACK_A, default={})
+
+# Check existence before accessing
+if context.has(MARKET_SNAPSHOT):
+    snapshot = context.get(MARKET_SNAPSHOT)
+    instruments = snapshot["instruments"]
+
+# Get multiple values
+pm_pitches = context.get(PM_PITCHES)
+peer_reviews = context.get(PEER_REVIEWS)
+```
+
+#### Writing Context Values
+
+```python
+# Set single value (returns new context)
+context = context.set(RESEARCH_PACK_A, research_data)
+
+# Update multiple values at once
+context = context.update(
+    RESEARCH_PACK_A=research_data,
+    MARKET_SNAPSHOT=snapshot,
+    EXECUTION_CONSTRAINTS=constraints
+)
+
+# Store error in metadata (doesn't affect main data)
+context = context.set_metadata("ResearchStage_error", error_msg)
+```
+
+#### Custom Context Keys
+
+Define custom keys for new stages:
+
+```python
+from backend.pipeline.base import ContextKey
+
+# Define keys at module level
+MY_STAGE_OUTPUT = ContextKey("my_stage_output")
+MY_STAGE_CONFIG = ContextKey("my_stage_config")
+
+# Use in stage
+class MyStage(Stage):
+    async def execute(self, context: PipelineContext) -> PipelineContext:
+        config = context.get(MY_STAGE_CONFIG, default={})
+        result = await self._process(config)
+        return context.set(MY_STAGE_OUTPUT, result)
+```
+
+---
+
+### Temperature Management Overview
+
+The system uses a centralized `TemperatureManager` to configure model creativity:
+
+```python
+from backend.config.temperature_manager import TemperatureManager
+
+# Get temperature for specific task
+temp_mgr = TemperatureManager()
+research_temp = temp_mgr.get_temperature("research")      # 0.7 - balanced
+pitch_temp = temp_mgr.get_temperature("pm_pitch")        # 0.8 - creative
+review_temp = temp_mgr.get_temperature("peer_review")    # 0.3 - analytical
+chairman_temp = temp_mgr.get_temperature("chairman")     # 0.5 - balanced
+```
+
+**Temperature Ranges:**
+- **0.0 - 0.3:** Deterministic, analytical (peer review, risk assessment)
+- **0.4 - 0.6:** Balanced (chairman decisions, checkpoints)
+- **0.7 - 1.0:** Creative (research, PM pitches)
+- **1.0+:** Very creative (experimental only)
+
+**Best Practices:**
+1. Use lower temperatures for critical decisions (risk management, execution)
+2. Use higher temperatures for brainstorming and research
+3. Override stage-specific temperatures only when needed
+4. Document temperature choices in stage configuration
+
+**Configuration:**
+
+Default temperatures are defined in `backend/config/temperature_manager.py`:
+
+```python
+DEFAULT_TEMPERATURES = {
+    "research": 0.7,          # Research providers
+    "pm_pitch": 0.8,          # PM trade pitches
+    "peer_review": 0.3,       # Peer review analysis
+    "chairman": 0.5,          # Chairman synthesis
+    "checkpoint": 0.4,        # Checkpoint conviction updates
+    "risk_assessment": 0.2,   # Risk management
+}
+```
+
+Override in stage constructor:
+
+```python
+# Use custom temperature
+stage = ResearchStage(temperature=0.5)
+
+# Use default temperature (0.7 for research)
+stage = ResearchStage()
+```
+
+---
+
+### Integration Testing Tips
+
+#### 1. Mock External APIs
+
+Use mocks to test stages without calling real APIs:
+
+```python
+import pytest
+from unittest.mock import AsyncMock, patch
+
+@pytest.mark.asyncio
+async def test_research_stage():
+    # Mock Perplexity API response
+    mock_response = {
+        "source": "perplexity",
+        "natural_language": "Mock research report",
+        "structured_json": {...}
+    }
+
+    with patch("research.providers.perplexity_client.query") as mock_query:
+        mock_query.return_value = mock_response
+
+        stage = ResearchStage()
+        context = PipelineContext.create(USER_QUERY="Test query")
+        result_context = await stage.execute(context)
+
+        assert result_context.has(RESEARCH_PACK_A)
+        research_pack = result_context.get(RESEARCH_PACK_A)
+        assert research_pack["source"] == "perplexity"
+```
+
+#### 2. Test Pipeline Composition
+
+Verify stages chain together correctly:
+
+```python
+@pytest.mark.asyncio
+async def test_weekly_pipeline():
+    pipeline = Pipeline([
+        GeminiResearchStage(),
+        PerplexityResearchStage(),
+        PMPitchStage()
+    ])
+
+    context = PipelineContext.create(USER_QUERY="Market analysis")
+    result = await pipeline.execute(context)
+
+    # Verify each stage produced output
+    assert result.has(RESEARCH_PACK_A)
+    assert result.has(RESEARCH_PACK_B)
+    assert result.has(PM_PITCHES)
+```
+
+#### 3. Test Error Propagation
+
+Verify errors are handled correctly:
+
+```python
+@pytest.mark.asyncio
+async def test_stage_error_handling():
+    class FailingStage(Stage):
+        @property
+        def name(self) -> str:
+            return "FailingStage"
+
+        async def execute(self, context: PipelineContext) -> PipelineContext:
+            raise ValueError("Intentional failure")
+
+    pipeline = Pipeline([FailingStage()])
+    context = PipelineContext.create()
+
+    with pytest.raises(ValueError, match="Intentional failure"):
+        await pipeline.execute(context)
+```
+
+#### 4. Test with Real Data
+
+Use saved snapshots for integration tests:
+
+```python
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_checkpoint_with_real_data():
+    # Load saved market snapshot from previous week
+    with open("tests/fixtures/market_snapshot_2025-01-15.json") as f:
+        snapshot = json.load(f)
+
+    context = PipelineContext.create()
+    context = context.set(MARKET_SNAPSHOT, snapshot)
+
+    stage = CheckpointStage()
+    result = await stage.execute(context)
+
+    checkpoint_result = result.get(CHECKPOINT_RESULT)
+    assert checkpoint_result["success"]
+```
+
+#### 5. Validate JSON Schemas
+
+Test that stage outputs match expected schemas:
+
+```python
+import jsonschema
+
+@pytest.mark.asyncio
+async def test_pm_pitch_schema():
+    stage = PMPitchStage()
+    context = PipelineContext.create(
+        RESEARCH_PACK_A=mock_research_a,
+        RESEARCH_PACK_B=mock_research_b
+    )
+
+    result = await stage.execute(context)
+    pitches = result.get(PM_PITCHES)
+
+    # Load schema
+    with open("backend/schemas/pm_pitch.json") as f:
+        schema = json.load(f)
+
+    # Validate each pitch
+    for pitch in pitches:
+        jsonschema.validate(pitch, schema)
+```
+
+---
+
+### Related Documentation
+
+- **[PIPELINE.md](../PIPELINE.md)** - Comprehensive pipeline architecture details
+  - Core classes (Stage, Pipeline, PipelineContext)
+  - Design principles (composability, immutability, event sourcing)
+  - Error handling patterns
+  - Streaming and progress callbacks
+
+- **[CLAUDE.md](../CLAUDE.md)** - Technical implementation notes
+  - Database architecture (asyncpg connection pool)
+  - Configuration system (ports, environment variables)
+  - Data models (PM pitches, peer reviews, chairman decisions)
+  - CLI commands and paper trading accounts
+
+- **[PRD.md](../PRD.md)** - Product requirements and specifications
+  - System overview and goals
+  - Functional requirements
+  - Non-functional requirements
+  - Acceptance criteria
+
+- **[API_ENDPOINTS.md](./API_ENDPOINTS.md)** - REST API documentation
+  - Endpoint reference
+  - Request/response schemas
+  - Authentication
+  - Error codes
+
+---
+
 ## See Also
 
 - [PIPELINE.md](../PIPELINE.md) - Pipeline architecture and design principles
