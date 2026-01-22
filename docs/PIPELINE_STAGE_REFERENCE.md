@@ -29,6 +29,7 @@ For detailed architecture information, see [PIPELINE.md](../PIPELINE.md).
 | `MarketSnapshotStage` | Capture frozen market indicators | Asset list, indicator configs | - | `MARKET_SNAPSHOT`, `EXECUTION_CONSTRAINTS` |
 | `RiskManagementStage` | Assess risk and size positions | Risk limits, portfolio constraints | `CHAIRMAN_DECISION`, `MARKET_SNAPSHOT` | `RISK_ASSESSMENT` |
 | `ExecutionStage` | Execute trades via Alpaca | Account configs, Alpaca MCP client | `CHAIRMAN_DECISION`, `RISK_ASSESSMENT` | `EXECUTION_RESULT` |
+| `CheckpointStage` | Daily conviction updates and position adjustments | None | `MARKET_SNAPSHOT`, `EXECUTION_RESULT` | `CHECKPOINT_RESULT`, `CHECKPOINT_ACTION`, `UPDATED_POSITIONS` |
 
 ---
 
@@ -2104,6 +2105,361 @@ failures = await fetch_all(
 
 ---
 
+#### CheckpointStage
+
+**Purpose:** Perform daily conviction updates and position adjustments based on frozen research and current market conditions
+
+**Overview:**
+
+`CheckpointStage` is the intraweek monitoring stage that evaluates whether to maintain, adjust, or exit positions based on:
+1. **Frozen indicators** from weekly research (no new research allowed)
+2. **Current P/L** and position data
+3. **Chairman's conviction update** (using frozen data only)
+
+The stage runs at predetermined checkpoint times throughout the trading day to continuously monitor positions and make tactical adjustments without conducting new fundamental research.
+
+**Key Constraint:** CheckpointStage operates under a **hard rule**: NO NEW RESEARCH. It can only reference:
+- Frozen market indicators from the weekly research pack
+- Current position data (P/L, size, entry price)
+- Peer account performance snapshot
+- Current market prices (for P/L calculation only)
+
+This prevents overfitting to intraday noise and maintains the integrity of the weekly research-driven process.
+
+**Constructor Parameters:**
+
+None. The stage uses `MultiAlpacaManager` internally and relies on frozen indicators from `MARKET_SNAPSHOT`.
+
+```python
+# No configuration needed - uses frozen indicators from weekly research
+stage = CheckpointStage()
+```
+
+**Context Keys:**
+
+*Input:*
+- `MARKET_SNAPSHOT` (dict, required) - Frozen market indicators from weekly research
+  - Contains: instrument data, technical indicators, event calendar
+  - Captured once per week and never updated
+  - Used as the ONLY source of market analysis during checkpoints
+- `EXECUTION_RESULT` (dict, optional) - Previous execution results for tracking
+
+*Output:*
+- `CHECKPOINT_RESULT` (dict) - Checkpoint evaluation result containing:
+  - `success` (bool) - Whether checkpoint completed successfully
+  - `week_id` (str) - Week identifier (YYYY-MM-DD)
+  - `timestamp` (str) - ISO8601 timestamp
+  - `checkpoint_time` (str) - Time in ET (e.g., "09:00")
+  - `positions_snapshot` (list[dict]) - Current positions across all accounts
+  - `actions` (list[dict]) - Conviction update actions taken
+  - `execution_results` (list[dict]) - Order execution outcomes
+  - `error` (str, optional) - Error message if checkpoint failed
+- `CHECKPOINT_ACTION` (list[dict]) - List of actions taken (same as actions in CHECKPOINT_RESULT)
+- `UPDATED_POSITIONS` (list[dict]) - New position states after adjustments
+
+**Checkpoint Times:**
+
+CheckpointStage runs at four predetermined times during the trading day (Eastern Time):
+
+| Time | Purpose |
+|------|---------|
+| **09:00 ET** | Morning evaluation after market open |
+| **12:00 ET** | Midday check for any significant developments |
+| **14:00 ET** | Afternoon assessment before final hour |
+| **15:50 ET** | Final check 10 minutes before market close |
+
+**Conviction Thresholds:**
+
+The stage uses conviction change thresholds to determine appropriate actions:
+
+```python
+CONVICTION_THRESHOLDS = {
+    "strong_flip": 1.5,    # If conviction changes by > 1.5, consider FLIP
+    "exit": 1.0,           # If conviction drops below 1.0, consider EXIT
+    "reduce": 0.5,         # If conviction drops by > 0.5, consider REDUCE
+    "increase": 0.5        # If conviction increases by > 0.5, consider INCREASE
+}
+```
+
+**Action Types:**
+
+CheckpointStage can take five possible actions based on conviction updates:
+
+| Action | Description | Example Trigger |
+|--------|-------------|-----------------|
+| `STAY` | Keep current position unchanged | Conviction unchanged or minimal change |
+| `EXIT` | Close position entirely (return to FLAT) | Conviction drops below 1.0 or invalidation condition met |
+| `FLIP` | Reverse direction (LONG → SHORT or SHORT → LONG) | Conviction changes by > 1.5 (e.g., +1.0 → -1.0) |
+| `REDUCE` | Reduce position size by 50% | Conviction drops by > 0.5 but still viable |
+| `INCREASE` | Increase position size by 50% | Conviction increases by > 0.5 |
+
+**Action Type Enum:**
+
+```python
+from backend.pipeline.stages.checkpoint import CheckpointAction
+
+class CheckpointAction(Enum):
+    STAY = "STAY"           # Keep current position
+    EXIT = "EXIT"           # Close position entirely
+    FLIP = "FLIP"           # Reverse direction
+    REDUCE = "REDUCE"       # Reduce position size by 50%
+    INCREASE = "INCREASE"   # Increase position size by 50%
+```
+
+**Checkpoint Result Schema:**
+
+The `CHECKPOINT_RESULT` context key contains:
+
+```json
+{
+  "success": true,
+  "week_id": "2025-01-22",
+  "timestamp": "2025-01-23T09:00:00Z",
+  "checkpoint_time": "09:00",
+  "positions_snapshot": [
+    {
+      "account": "COUNCIL",
+      "symbol": "SPY",
+      "instrument": "SPY",
+      "qty": "50000",
+      "side": "long",
+      "direction": "LONG",
+      "current_price": 450.25,
+      "cost_basis": 448.50,
+      "market_value": 22512500.0,
+      "unrealized_pl": 87500.0,
+      "unrealized_plpc": 0.0195,
+      "entry_price": 448.50
+    }
+  ],
+  "actions": [
+    {
+      "account": "COUNCIL",
+      "instrument": "SPY",
+      "direction": "LONG",
+      "action": "STAY",
+      "reason": "Conviction remains strong at 1.2, P/L +1.95%",
+      "executed": false,
+      "conviction_original": 1.0,
+      "conviction_updated": 1.2,
+      "conviction_change": 0.2
+    },
+    {
+      "account": "SONNET",
+      "instrument": "QQQ",
+      "direction": "SHORT",
+      "action": "EXIT",
+      "reason": "Stop loss triggered, unrealized P/L -5.2%",
+      "executed": true,
+      "conviction_original": -1.5,
+      "conviction_updated": 0.0,
+      "conviction_change": 1.5,
+      "order_id": "alpaca-order-123"
+    }
+  ],
+  "execution_results": [
+    {
+      "account": "SONNET",
+      "symbol": "QQQ",
+      "action": "EXIT",
+      "success": true,
+      "order_id": "alpaca-order-123",
+      "message": "Position closed"
+    }
+  ]
+}
+```
+
+**Evaluation Process:**
+
+For each open position, CheckpointStage:
+
+1. **Snapshot Current State:**
+   - Fetch current position data (qty, P/L, entry price)
+   - Get account information (buying power, portfolio value)
+
+2. **Evaluate Conviction:**
+   - Query Chairman model with frozen indicators + current P/L
+   - Chairman provides updated conviction score
+   - Chairman explains reasoning (e.g., "invalidation condition met", "thesis intact")
+
+3. **Determine Action:**
+   - Compare original conviction vs updated conviction
+   - Apply conviction thresholds to determine action type
+   - Special cases:
+     - If invalidation condition met → EXIT
+     - If stop loss triggered (P/L < -5%) → EXIT
+     - If profit target hit (P/L > +10%) → REDUCE or EXIT
+
+4. **Execute Adjustment:**
+   - If action is STAY → no order placement
+   - If action is EXIT/FLIP/REDUCE/INCREASE → place appropriate orders
+   - Log execution results to database
+
+**Chairman Evaluation Prompt:**
+
+The Chairman model receives a structured prompt containing:
+
+```markdown
+# Checkpoint Evaluation - {checkpoint_time}
+
+## Current Position
+- **Account:** {account}
+- **Instrument:** {instrument}
+- **Direction:** {direction}
+- **Quantity:** {qty}
+- **Entry Price:** ${entry_price}
+- **Current Price:** ${current_price}
+- **Unrealized P/L:** ${unrealized_pl} ({unrealized_plpc}%)
+
+## Original Thesis (from Weekly Research)
+{original_thesis}
+
+## Frozen Indicators (from Weekly Research)
+{frozen_indicators}
+
+## Current Peer Performance
+{peer_snapshot}
+
+## Evaluation Questions
+1. Is the original thesis still intact?
+2. Have any invalidation conditions been met?
+3. Should conviction be adjusted based on current P/L and frozen indicators?
+4. Recommended action: STAY / EXIT / FLIP / REDUCE / INCREASE
+
+**IMPORTANT:** You may ONLY use the frozen indicators provided. Do NOT consider external news, intraday price action, or new analysis. Base your decision solely on:
+- Original thesis
+- Frozen indicators from weekly research
+- Current P/L performance
+- Peer account comparison
+```
+
+**Error Handling:**
+
+1. **No Frozen Market Snapshot:**
+   - Returns early with error: "No frozen market snapshot found. Run weekly research first."
+   - CheckpointStage cannot operate without frozen indicators
+
+2. **No Open Positions:**
+   - Returns success with message: "No positions to monitor"
+   - Checkpoint completes normally (staying flat is valid)
+
+3. **Chairman API Failure:**
+   - Logs error to console
+   - Continues evaluating other positions (partial success)
+   - Failed position action set to STAY (conservative default)
+
+4. **Order Execution Failure:**
+   - Logs error with reason (e.g., insufficient buying power, market closed)
+   - Marks action as `executed: false` with error message
+   - Does not block other position adjustments
+
+**Configuration Example:**
+
+```python
+from backend.pipeline.stages.checkpoint import (
+    CheckpointStage,
+    CHECKPOINT_RESULT,
+    CHECKPOINT_ACTION,
+    UPDATED_POSITIONS,
+    CheckpointAction
+)
+from backend.pipeline.stages.research import MARKET_SNAPSHOT
+from backend.pipeline.stages.execution import EXECUTION_RESULT
+
+# Create checkpoint stage (no parameters needed)
+checkpoint_stage = CheckpointStage()
+
+# Ensure context has frozen market snapshot from weekly research
+# (CheckpointStage requires MARKET_SNAPSHOT to operate)
+assert context.get(MARKET_SNAPSHOT) is not None, "Run weekly research first"
+
+# Execute checkpoint
+context = await checkpoint_stage.execute(context)
+
+# Access checkpoint results
+checkpoint_result = context.get(CHECKPOINT_RESULT)
+
+if checkpoint_result.get("success"):
+    print(f"✅ Checkpoint complete at {checkpoint_result['checkpoint_time']}")
+    print(f"📊 Monitored {len(checkpoint_result['positions_snapshot'])} positions")
+
+    for action in checkpoint_result["actions"]:
+        action_icon = {
+            "STAY": "⏸️ ",
+            "EXIT": "🚪",
+            "FLIP": "🔄",
+            "REDUCE": "📉",
+            "INCREASE": "📈"
+        }.get(action["action"], "❓")
+
+        print(f"{action_icon} {action['account']} | {action['instrument']} | "
+              f"Action: {action['action']} | Reason: {action['reason']}")
+
+        if action["executed"]:
+            print(f"  ✅ Executed: Order ID {action.get('order_id')}")
+else:
+    print(f"❌ Checkpoint failed: {checkpoint_result.get('error')}")
+```
+
+**Checkpoint Pipeline:**
+
+CheckpointStage is typically used in a minimal checkpoint pipeline:
+
+```python
+from backend.pipeline.base import Pipeline
+from backend.pipeline.stages.checkpoint import CheckpointStage
+
+# Checkpoint pipeline (runs 4x daily)
+checkpoint_pipeline = Pipeline([
+    CheckpointStage()  # Uses frozen indicators from weekly research
+])
+
+# Execute at checkpoint times (09:00, 12:00, 14:00, 15:50 ET)
+result_context = await checkpoint_pipeline.execute(initial_context)
+```
+
+**Best Practices:**
+
+1. **Always Run Weekly Research First:**
+   - CheckpointStage requires frozen indicators from weekly research
+   - Attempting to run checkpoint without weekly research will fail
+   - Ensure `MARKET_SNAPSHOT` is present in context
+
+2. **Monitor Panic Exits:**
+   - Track EXIT actions to identify "panic exits" (unjustified exits)
+   - Compare EXIT actions across accounts to measure discipline
+   - High panic exit rate suggests model is too reactive
+
+3. **Conviction Volatility:**
+   - Track how much conviction changes at each checkpoint
+   - Large swings indicate unstable thesis or overreaction to P/L
+   - Low volatility indicates disciplined position management
+
+4. **Peer Comparison:**
+   - Review how different accounts respond to same P/L scenarios
+   - Identify which models are more/less reactive
+   - Use for model selection and strategy refinement
+
+5. **Execution Timing:**
+   - Run checkpoints at predetermined times only (09:00, 12:00, 14:00, 15:50 ET)
+   - Do NOT run checkpoints more frequently (leads to overtrading)
+   - Final checkpoint (15:50 ET) is critical for end-of-day adjustments
+
+6. **Action Thresholds:**
+   - Review conviction thresholds periodically based on performance
+   - If models exit too early, increase exit threshold
+   - If models hold losing positions too long, decrease exit threshold
+
+**See Also:**
+
+- `backend/pipeline/stages/checkpoint.py` - Full implementation
+- `backend/multi_alpaca_client.py` - Multi-account position management
+- `backend/requesty_client.py` - Chairman conviction evaluation
+- [PIPELINE.md](../PIPELINE.md) - Pipeline architecture overview
+
+---
+
 ## Pipeline Configurations
 
 ### Weekly Pipeline
@@ -2129,14 +2485,11 @@ Runs at daily checkpoints (09:00, 12:00, 14:00, 15:50 ET) for conviction updates
 
 ```python
 checkpoint_pipeline = Pipeline([
-    MarketSnapshotStage(),
-    ConvictionUpdateStage(),  # Not listed above - updates conviction only
-    RiskManagementStage(),
-    ExecutionStage(),  # Only if action != STAY
+    CheckpointStage(),  # Evaluates conviction using frozen indicators from weekly research
 ])
 ```
 
-**Note:** Checkpoints use frozen indicators from the weekly run. No new research is performed.
+**Note:** Checkpoints use frozen indicators from the weekly run. No new research is performed. CheckpointStage handles position evaluation, conviction updates, and execution internally.
 
 ---
 
