@@ -1294,31 +1294,447 @@ for review in peer_reviews:
 
 #### ChairmanStage
 
-**Purpose:** Synthesize final trading decision from PM pitches and peer reviews
+**Purpose:** Synthesize final council trading decision from PM pitches and peer reviews with dissent tracking
 
-**Parameters:**
-- `chairman_model`: Opus-class model for synthesis (e.g., `anthropic/claude-opus-4`)
-- `synthesis_prompt`: Jinja2 template for chairman synthesis
-- `max_tokens`: Maximum tokens for synthesis response
+**Overview:**
+
+`ChairmanStage` acts as the Chief Investment Officer (CIO) of the trading system, synthesizing all PM pitches and peer reviews into a single, optimal council trading decision. This stage represents the culmination of the council decision-making process where:
+
+1. **Objective Synthesis:** Reviews all PM pitches with peer evaluation context
+2. **Consensus Building:** Identifies areas of agreement and disagreement among PMs
+3. **Dissent Tracking:** Documents minority views and counterarguments
+4. **Risk Integration:** Considers peer-reviewed risk assessments
+5. **Monitoring Plan:** Provides checkpoint guidance for tracking decision validity
+6. **Conviction Calibration:** Weights conviction based on pitch quality and peer scores
+
+The Chairman uses Claude Opus 4.5 (or equivalent Opus-class model) to provide high-quality strategic synthesis. Unlike individual PM models, the Chairman sees all pitches, all peer reviews, and the full context of the council's deliberations.
+
+**Key Responsibilities:**
+
+1. **Decision Making:** Select the best trade from competing pitches or decide to stay FLAT
+2. **Rationale Documentation:** Explain why the chosen trade is superior
+3. **Dissent Recording:** Document why other pitches were rejected
+4. **Monitoring Setup:** Define what indicators to watch at checkpoints
+5. **Conviction Synthesis:** Blend PM conviction with peer review quality scores
+
+**Constructor Parameters:**
+- `temperature` (float | None): Model temperature for synthesis generation
+  - Default: None (uses TemperatureManager default for "chairman")
+  - Range: 0.0 (deterministic) to 2.0 (creative)
+  - Typical: 0.5-0.7 for balanced, thoughtful synthesis
+  - Lower values (0.3-0.5) for more consistent decision-making
+  - Higher values (0.7-1.0) for more creative trade selection
 
 **Context Keys:**
-- Input: `PM_PITCHES` (list), `PEER_REVIEWS` (list)
-- Output: `CHAIRMAN_DECISION` (dict) - Final trading decision with rationale
+
+*Input:*
+- `PM_PITCHES` (list) - Trade pitches from PMPitchStage
+  - Each pitch contains: model, instrument, direction, thesis, conviction, risk profile, entry/exit policies
+  - Minimum 1 pitch required (can proceed with single pitch)
+  - Typical: 4-5 pitches from different PM models
+
+- `PEER_REVIEWS` (list) - Structured reviews from PeerReviewStage
+  - Each review contains: scores, best_argument_against, one_flip_condition, suggested_fix
+  - Used to assess pitch quality and identify weaknesses
+  - Optional: Chairman can proceed without peer reviews (though quality degrades)
+
+- `LABEL_TO_MODEL` (dict) - De-anonymization mapping from PeerReviewStage
+  - Maps anonymous labels (e.g., "Pitch A") to original model names
+  - Used to attribute pitches correctly in chairman synthesis
+  - Optional: If not provided, Chairman works with pitch data directly
+
+*Output:*
+- `CHAIRMAN_DECISION` (dict) - Final council trading decision containing:
+  - `instrument`: Selected ticker (e.g., "SPY", "QQQ") or "FLAT"
+  - `direction`: "LONG", "SHORT", or "FLAT"
+  - `horizon`: Time horizon ("1W", "2W", "1M")
+  - `conviction`: Council conviction score (-2 to +2)
+  - `rationale`: Explanation for why this trade was chosen
+  - `dissent_summary`: List of why other pitches were rejected
+  - `monitoring_plan`: What to check at daily checkpoints
+  - `risk_profile`: "BASE", "AGGRESSIVE", or "CONSERVATIVE"
+  - `entry_policy`: Entry execution rules from selected pitch
+  - `exit_policy`: Stop loss, take profit, time stop rules from selected pitch
+  - `selected_pitch_model`: Which PM model's pitch was selected
+  - `average_peer_score`: Average peer review score for selected pitch
+  - `timestamp`: ISO8601 timestamp of decision
 
 **Decision Schema:**
+
 ```json
 {
-  "selected_trade": {
-    "instrument": "SPY",
-    "direction": "LONG",
-    "horizon": "1w"
-  },
+  "instrument": "SPY",
+  "direction": "LONG",
+  "horizon": "1W",
   "conviction": 1.2,
-  "rationale": "...",
-  "dissent_summary": [...],
-  "monitoring_plan": {...}
+  "rationale": "Council selects SPY LONG based on convergence of growth acceleration thesis and favorable risk/reward. Peer reviews scored this pitch 8.2/10 on average, highlighting strong clarity and risk definition. The timing catalyst (earnings season strength) is well-defined with clear invalidation at 520 level.",
+  "dissent_summary": [
+    "QQQ LONG pitch rejected due to concentration risk in mega-cap tech",
+    "TLT SHORT pitch rejected due to uncertain timing on Fed policy pivot",
+    "GLD LONG pitch rejected due to weak conviction and unclear catalyst"
+  ],
+  "monitoring_plan": {
+    "indicators_to_watch": ["SPY price vs 525 support", "VIX staying below 18"],
+    "checkpoint_actions": [
+      "If SPY breaks below 520, reassess thesis validity",
+      "If VIX spikes above 20, consider reducing conviction"
+    ]
+  },
+  "risk_profile": "BASE",
+  "entry_policy": {
+    "mode": "limit",
+    "limit_price": 527.50,
+    "good_til": "day_end",
+    "allow_partial": true
+  },
+  "exit_policy": {
+    "stop_loss_pct": 0.02,
+    "take_profit_pct": 0.05,
+    "time_stop_days": 7,
+    "trailing_stop": false
+  },
+  "selected_pitch_model": "openai/gpt-5.1",
+  "average_peer_score": 8.2,
+  "timestamp": "2025-01-15T14:45:00Z"
 }
 ```
+
+**Configuration Example:**
+
+```python
+from backend.pipeline.stages.chairman import ChairmanStage
+
+# Basic usage with default temperature
+stage = ChairmanStage()
+
+# With custom temperature for more deterministic synthesis
+stage = ChairmanStage(temperature=0.4)
+
+# With higher temperature for more creative synthesis
+stage = ChairmanStage(temperature=0.8)
+
+# Execute stage
+context = await stage.execute(context)
+chairman_decision = context.get(CHAIRMAN_DECISION)
+
+# Access decision data
+print(f"Council Decision: {chairman_decision['instrument']} {chairman_decision['direction']}")
+print(f"Conviction: {chairman_decision['conviction']}")
+print(f"Rationale: {chairman_decision['rationale']}")
+print(f"Selected from: {chairman_decision['selected_pitch_model']}")
+print(f"Peer score: {chairman_decision['average_peer_score']:.2f}/10")
+```
+
+**Tradable Universe:**
+
+The Chairman can only select from the approved tradable universe:
+- **Equities:** SPY, QQQ, IWM
+- **Duration:** TLT, IEF (future support)
+- **Credit:** HYG, LQD (future support)
+- **Currencies:** UUP
+- **Commodities:** GLD, USO
+- **Volatility:** VIXY
+- **Inverse:** SH
+
+Additionally, the Chairman can decide to stay **FLAT** (no position) if no pitch meets quality standards.
+
+**Conviction Scale:**
+
+The Chairman outputs conviction scores on a -2 to +2 scale:
+- **+2.0:** Extremely high conviction (rare, requires exceptional pitch quality and peer consensus)
+- **+1.5:** High conviction (strong thesis, good peer scores, clear catalyst)
+- **+1.0:** Medium-high conviction (solid thesis, acceptable peer scores)
+- **+0.5:** Medium-low conviction (weak thesis or mixed peer feedback)
+- **+0.0:** Neutral (staying FLAT, no compelling trades)
+- **-0.5 to -2.0:** Short conviction (mirror of long convictions)
+
+**Synthesis Process:**
+
+The Chairman follows a systematic synthesis process:
+
+1. **Pitch Review:**
+   - Read all PM pitches with their thesis, conviction, risk profile
+   - Note areas of agreement (multiple PMs pitching same direction)
+   - Note areas of disagreement (conflicting views)
+
+2. **Peer Review Integration:**
+   - Review scores for each pitch across 7 dimensions
+   - Identify highest-rated pitches by average peer score
+   - Review "kill shot" critiques (best_argument_against)
+   - Review flip conditions (one_flip_condition)
+   - Review suggested improvements (suggested_fix)
+
+3. **Consensus Identification:**
+   - Check if multiple PMs converge on same instrument/direction
+   - Check if high-conviction pitches align
+   - Weight convergence as positive signal
+
+4. **Dissent Analysis:**
+   - Document why competing pitches were rejected
+   - Extract valuable counterarguments from peer reviews
+   - Note minority views that deserve monitoring
+
+5. **Risk-Adjusted Selection:**
+   - Balance conviction with risk management quality
+   - Prefer pitches with clear stop loss and invalidation criteria
+   - Consider tradeability and execution feasibility
+
+6. **Monitoring Plan Generation:**
+   - Define what indicators to check at daily checkpoints
+   - Set specific thresholds for reassessing thesis
+   - Provide actionable guidance for conviction updates
+
+**JSON Schema Validation:**
+
+The Chairman's output is validated against `schemas/chairman_decision.schema.json`:
+
+```json
+{
+  "type": "object",
+  "required": ["instrument", "direction", "horizon", "conviction", "rationale"],
+  "properties": {
+    "instrument": {
+      "type": "string",
+      "enum": ["SPY", "QQQ", "IWM", "TLT", "HYG", "UUP", "GLD", "USO", "VIXY", "SH", "FLAT"]
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["LONG", "SHORT", "FLAT"]
+    },
+    "horizon": {
+      "type": "string",
+      "enum": ["1W", "2W", "1M"]
+    },
+    "conviction": {
+      "type": "number",
+      "minimum": -2,
+      "maximum": 2
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 50
+    },
+    "dissent_summary": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "monitoring_plan": {
+      "type": "object",
+      "properties": {
+        "indicators_to_watch": {"type": "array"},
+        "checkpoint_actions": {"type": "array"}
+      }
+    }
+  }
+}
+```
+
+**Error Handling:**
+
+The stage is designed to never crash the pipeline and always produce a decision:
+
+1. **No Pitches Found:**
+   - Returns original context unchanged
+   - Prints error: "❌ Error: PM pitches or peer reviews not found in context"
+   - Downstream stages should check for CHAIRMAN_DECISION presence
+
+2. **Chairman Query Failure:**
+   - If Claude Opus fails to respond, falls back to highest-conviction pitch
+   - Prints warning: "❌ Failed to generate chairman decision"
+   - Calls `_fallback_decision()` to select best pitch by conviction
+   - Fallback logic: Select pitch with highest conviction * average_peer_score
+
+3. **Parse Failure:**
+   - If chairman response cannot be parsed, uses fallback decision
+   - Prints warning with parse error details
+   - Fallback ensures pipeline never blocks on chairman synthesis failure
+
+4. **Schema Validation Failure:**
+   - Validates parsed decision against JSON schema
+   - If validation fails, attempts to fix common issues
+   - Ultimate fallback: Use highest-conviction pitch from PMs
+
+**Fallback Decision Logic:**
+
+When the Chairman cannot generate a decision, the system falls back to a simple heuristic:
+
+```python
+def _fallback_decision(self, pm_pitches: List[Dict]) -> Dict:
+    """Generate fallback decision by selecting highest conviction pitch."""
+    if not pm_pitches:
+        return {
+            "instrument": "FLAT",
+            "direction": "FLAT",
+            "horizon": "1W",
+            "conviction": 0,
+            "rationale": "No PM pitches available for synthesis",
+            "dissent_summary": [],
+            "monitoring_plan": {},
+        }
+
+    # Select pitch with highest conviction
+    best_pitch = max(pm_pitches, key=lambda p: abs(p.get("conviction", 0)))
+
+    return {
+        "instrument": best_pitch.get("selected_instrument", "FLAT"),
+        "direction": best_pitch["direction"],
+        "horizon": best_pitch["horizon"],
+        "conviction": best_pitch["conviction"] * 0.8,  # Reduce conviction due to fallback
+        "rationale": f"Fallback selection: Highest conviction pitch from {best_pitch['model']}",
+        "dissent_summary": ["Chairman synthesis unavailable - fallback to highest conviction"],
+        "monitoring_plan": {},
+        "risk_profile": best_pitch.get("risk_profile", "BASE"),
+        "entry_policy": best_pitch.get("entry_policy", {}),
+        "exit_policy": best_pitch.get("exit_policy", {}),
+    }
+```
+
+**Integration with Other Stages:**
+
+```python
+# Typical pipeline integration
+from backend.pipeline import Pipeline
+from backend.pipeline.stages.pm_pitch import PMPitchStage
+from backend.pipeline.stages.peer_review import PeerReviewStage
+from backend.pipeline.stages.chairman import ChairmanStage
+from backend.pipeline.stages.execution import ExecutionStage
+
+pipeline = Pipeline([
+    # ... Research stages populate RESEARCH_PACK_A, RESEARCH_PACK_B
+    PMPitchStage(),        # Generates PM_PITCHES
+    PeerReviewStage(),     # Generates PEER_REVIEWS and LABEL_TO_MODEL
+    ChairmanStage(),       # Synthesizes CHAIRMAN_DECISION
+    ExecutionStage(),      # Executes CHAIRMAN_DECISION via Alpaca
+])
+
+# The chairman receives:
+# - PM_PITCHES: Original pitches with full context
+# - PEER_REVIEWS: Anonymized reviews with scores and critiques
+# - LABEL_TO_MODEL: Mapping to de-anonymize pitches if needed
+
+# The chairman outputs:
+# - CHAIRMAN_DECISION: Final trade decision for execution
+```
+
+**Common Issues and Debugging:**
+
+1. **"PM pitches or peer reviews not found in context" error:**
+   - Cause: ChairmanStage run before PMPitchStage or PeerReviewStage
+   - Impact: No decision generated, returns original context
+   - Fix: Ensure proper stage ordering in pipeline
+
+2. **"Failed to generate chairman decision" warning:**
+   - Cause: Claude Opus API failure, rate limit, or network issue
+   - Impact: Falls back to highest-conviction pitch (degraded quality)
+   - Fix: Verify API key, check rate limits, increase timeout
+
+3. **Fallback decisions appearing frequently:**
+   - Cause: Chairman model unavailable or response parsing issues
+   - Impact: Lower quality decisions, no dissent tracking or monitoring plans
+   - Fix: Check model availability, review temperature settings, verify prompt clarity
+
+4. **Low conviction in chairman decisions:**
+   - Cause: Chairman is conservative, peer reviews show concerns, or pitches are weak
+   - Impact: Smaller position sizes, less aggressive trading
+   - Fix: This may be correct behavior; review pitch quality and peer feedback
+
+5. **Chairman always picks same PM model:**
+   - Cause: That model consistently produces highest-quality pitches
+   - Impact: Other PMs not getting selected, reducing diversity
+   - Fix: Review other PM models' performance, adjust prompts, or add model rotation logic
+
+**Performance Characteristics:**
+
+- **Execution Time:** 5-15 seconds for chairman synthesis
+  - Single model query (Claude Opus 4.5)
+  - Prompt includes all pitches + peer reviews (~3000-5000 tokens)
+  - Response generation: ~1000-2000 tokens
+  - JSON parsing and validation: <100ms
+
+- **API Costs:** ~$0.02-0.05 per synthesis
+  - Input tokens: ~4000 tokens (all pitches + reviews + system prompt)
+  - Output tokens: ~1500 tokens (decision + rationale + dissent)
+  - Total: ~5500 tokens per execution at Opus pricing
+
+- **Rate Limits:** Single query, minimal rate limit impact
+  - Uses requesty_client with retry logic
+  - Falls back gracefully if rate limit hit
+
+- **Memory Usage:** Minimal (<10MB)
+  - Loads all pitches and reviews into memory temporarily
+  - Discards after synthesis complete
+  - CHAIRMAN_DECISION stored in context (~2-5KB)
+
+**Database Persistence:**
+
+Chairman decisions are not automatically persisted to database. To store decisions:
+
+```python
+# In your pipeline post-processing
+from backend.db_helpers import execute
+
+chairman_decision = context.get(CHAIRMAN_DECISION)
+await execute(
+    """
+    INSERT INTO chairman_decisions
+    (week_id, instrument, direction, horizon, conviction, rationale,
+     dissent_summary, monitoring_plan, risk_profile, entry_policy,
+     exit_policy, selected_pitch_model, average_peer_score, decided_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    """,
+    week_id,
+    chairman_decision["instrument"],
+    chairman_decision["direction"],
+    chairman_decision["horizon"],
+    chairman_decision["conviction"],
+    chairman_decision["rationale"],
+    chairman_decision["dissent_summary"],  # JSONB
+    chairman_decision["monitoring_plan"],  # JSONB
+    chairman_decision.get("risk_profile", "BASE"),
+    chairman_decision.get("entry_policy", {}),  # JSONB
+    chairman_decision.get("exit_policy", {}),  # JSONB
+    chairman_decision.get("selected_pitch_model"),
+    chairman_decision.get("average_peer_score"),
+    chairman_decision.get("timestamp")
+)
+```
+
+**Best Practices:**
+
+1. **Temperature Selection:**
+   - Use 0.5-0.7 for balanced, thoughtful synthesis
+   - Lower (0.3-0.5) for more consistent decision-making
+   - Higher (0.7-1.0) for more creative trade selection
+   - Never exceed 1.0 (risks incoherent decisions)
+
+2. **Dissent Tracking:**
+   - Always review dissent_summary to understand trade-offs
+   - Minority views often contain valuable risk insights
+   - Use dissent notes for post-mortem analysis
+
+3. **Monitoring Plan Usage:**
+   - Checkpoint stages should reference monitoring_plan
+   - Define specific, actionable thresholds
+   - Update conviction based on monitoring plan indicators
+
+4. **Conviction Calibration:**
+   - Track chairman conviction vs actual trade outcomes
+   - Adjust if chairman is consistently over/under confident
+   - Compare chairman conviction to individual PM convictions
+
+5. **Fallback Awareness:**
+   - Monitor frequency of fallback decisions
+   - High fallback rate indicates chairman model issues
+   - Fallback decisions lack dissent tracking and monitoring plans
+
+**See Also:**
+
+- `backend/pipeline/stages/chairman.py` - Full implementation
+- `schemas/chairman_decision.schema.json` - Decision validation schema
+- `backend/requesty_client.py` - Chairman model query interface
+- [PIPELINE.md](../PIPELINE.md) - Pipeline architecture overview
+
+---
 
 ---
 
